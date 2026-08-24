@@ -1,0 +1,11 @@
+[project]
+name = "museoncon"
+version = "0.1.0"
+description = "Museon Controller Documentation"
+requires-python = ">=3.10"
+dependencies = [
+    "wireviz>=0.4.1",
+]
+
+[tool.uv]
+package = false

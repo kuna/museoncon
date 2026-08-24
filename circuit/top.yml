@@ -1,0 +1,255 @@
+# =============================================================
+#  비트콘 와이어링 하네스 — WireViz
+#
+#  렌더:  wireviz bitcon-harness.yml
+#  출력:  .html / .svg / .png / .bom.tsv
+#
+#  한글이 네모로 깨지면 아래 options.fontname 을
+#  설치된 CJK 폰트로 바꿔줘 (fc-list :lang=ko 로 확인).
+# =============================================================
+
+metadata:
+  title: BitCon Wiring Harness
+  pn: BITCON-HARN-001
+  revision: A
+  description: >
+    RP2350 (Raspberry Pi Pico 2) rhythm game controller.
+    9x illuminated button units + 2ch photointerrupter for rotation sensing.
+    All resistors live board-side between the GPIO and the header pin —
+    they appear in the BOM but not in the wiring graph.
+  authors:
+    Created:
+      name: Dongwon
+      date: 2026-08-23
+
+options:
+  fontname: Noto Sans KR
+  bgcolor: WH
+  color_mode: full
+
+# -------------------------------------------------------------
+#  CONNECTORS
+# -------------------------------------------------------------
+connectors:
+
+  # ---- 기판측 XH 헤더 (버튼) --------------------------------
+  J1:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP9", "IN+ / GP0", "OUT+ / GND", "GND"]
+    notes: BTN1 — 220R in series on LED_IN+, 10k pull-up on IN+
+    additional_components: &res_btn
+      - type: Resistor
+        subtype: 220R 1/4W (LED series)
+        qty: 1
+      - type: Resistor
+        subtype: 10k 1/4W (SW pull-up)
+        qty: 1
+
+  J2:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP10", "IN+ / GP1", "OUT+ / GND", "GND"]
+    notes: BTN2
+    additional_components: *res_btn
+
+  J3:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP11", "IN+ / GP2", "OUT+ / GND", "GND"]
+    notes: BTN3
+    additional_components: *res_btn
+
+  J4:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP12", "IN+ / GP3", "OUT+ / GND", "GND"]
+    notes: BTN4
+    additional_components: *res_btn
+
+  J5:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP13", "IN+ / GP4", "OUT+ / GND", "GND"]
+    notes: BTN5
+    additional_components: *res_btn
+
+  J6:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP14", "IN+ / GP5", "OUT+ / GND", "GND"]
+    notes: BTN6
+    additional_components: *res_btn
+
+  J7:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP15", "IN+ / GP6", "OUT+ / GND", "GND"]
+    notes: BTN7
+    additional_components: *res_btn
+
+  J8:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP16", "IN+ / GP7", "OUT+ / GND", "GND"]
+    notes: BTN8
+    additional_components: *res_btn
+
+  J9:
+    type: XH2.54
+    subtype: 4P board header
+    color: WH
+    pinlabels: ["LED_IN+ / GP17", "IN+ / GP8", "OUT+ / GND", "GND"]
+    notes: BTN9
+    additional_components: *res_btn
+
+  # ---- 기판측 XH 헤더 (포토인터럽터) ------------------------
+  J10:
+    type: XH2.54
+    subtype: 5P board header
+    color: WH
+    pinlabels: ["GND", "LED1 / 3V3", "LED2 / 3V3", "SEN1 / GP18", "SEN2 / GP19"]
+    notes: 1k in series on LED1+LED2, 4.7k pull-up on SEN1+SEN2
+    additional_components:
+      - type: Resistor
+        subtype: 1k 1/4W (IR LED series)
+        qty: 2
+      - type: Resistor
+        subtype: 4.7k 1/4W (phototransistor pull-up)
+        qty: 2
+
+  # ---- 버튼 유닛 --------------------------------------------
+  BTN1: &btn_unit
+    type: Arcade button
+    subtype: microswitch + LED
+    color: BK
+    pinlabels: ["LED anode", "SW COM", "SW NO", "LED cathode"]
+    notes: SW = GSM-V0303A06 (0.3A 24VDC), faston tabs
+  BTN2: *btn_unit
+  BTN3: *btn_unit
+  BTN4: *btn_unit
+  BTN5: *btn_unit
+  BTN6: *btn_unit
+  BTN7: *btn_unit
+  BTN8: *btn_unit
+  BTN9: *btn_unit
+
+  # ---- 포토인터럽터 쌍 --------------------------------------
+  PI:
+    type: Photointerrupter x2
+    subtype: 4mm slot, unmarked P/N
+    color: BK
+    pinlabels: ["Common (LED K + TR E)", "PI1 LED anode", "PI2 LED anode", "PI1 TR collector", "PI2 TR collector"]
+    notes: Bare LED + phototransistor, no built-in Schmitt trigger
+
+# -------------------------------------------------------------
+#  CABLES
+# -------------------------------------------------------------
+cables:
+
+  H1: &harness_btn
+    category: bundle
+    gauge: 24 AWG
+    length: 0.3
+    colors: [RD, WH, BN, BK]
+    wirelabels: [LED_IN+, IN+, OUT+, GND]
+    notes: RD = LED supply, WH = switch signal, BN = switch return, BK = LED return
+    additional_components:
+      - type: XH2.54 housing
+        subtype: 4P
+        qty: 1
+      - type: XH2.54 crimp terminal
+        qty_multiplier: wirecount
+      - type: Faston female terminal
+        subtype: measure blade width before ordering (2.8 / 4.8mm)
+        qty: 2
+
+  H2: *harness_btn
+  H3: *harness_btn
+  H4: *harness_btn
+  H5: *harness_btn
+  H6: *harness_btn
+  H7: *harness_btn
+  H8: *harness_btn
+  H9: *harness_btn
+
+  H10:
+    category: bundle
+    gauge: 24 AWG
+    length: 0.25
+    colors: [BK, RD, OG, WH, GN]
+    wirelabels: [GND, LED1, LED2, SEN1, SEN2]
+    notes: Keep this bundle away from the LED wiring — sensor edges matter
+    additional_components:
+      - type: XH2.54 housing
+        subtype: 5P
+        qty: 1
+      - type: XH2.54 crimp terminal
+        qty_multiplier: wirecount
+
+# -------------------------------------------------------------
+#  CONNECTIONS
+# -------------------------------------------------------------
+connections:
+  -
+    - J1: [1-4]
+    - H1: [1-4]
+    - BTN1: [1-4]
+  -
+    - J2: [1-4]
+    - H2: [1-4]
+    - BTN2: [1-4]
+  -
+    - J3: [1-4]
+    - H3: [1-4]
+    - BTN3: [1-4]
+  -
+    - J4: [1-4]
+    - H4: [1-4]
+    - BTN4: [1-4]
+  -
+    - J5: [1-4]
+    - H5: [1-4]
+    - BTN5: [1-4]
+  -
+    - J6: [1-4]
+    - H6: [1-4]
+    - BTN6: [1-4]
+  -
+    - J7: [1-4]
+    - H7: [1-4]
+    - BTN7: [1-4]
+  -
+    - J8: [1-4]
+    - H8: [1-4]
+    - BTN8: [1-4]
+  -
+    - J9: [1-4]
+    - H9: [1-4]
+    - BTN9: [1-4]
+  -
+    - J10: [1-5]
+    - H10: [1-5]
+    - PI: [1-5]
+
+# -------------------------------------------------------------
+#  기판 자체 부품 (하네스 외)
+# -------------------------------------------------------------
+additional_bom_items:
+  - description: Raspberry Pi Pico 2 (RP2350)
+    qty: 1
+  - description: Female pin header 2.54mm 20P (Pico socket)
+    qty: 2
+  - description: Perfboard 2.54mm pitch, 70x90mm min
+    qty: 1
+  - description: Stranded hookup wire 24 AWG
+    qty: 1
+    unit: spool

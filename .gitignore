@@ -1,0 +1,10 @@
+# python env
+.venv/
+__pycache__/
+
+# temp
+.swp
+.tmp
+
+# mac
+.DS_Store

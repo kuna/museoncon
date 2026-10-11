@@ -150,9 +150,9 @@ values from a script without touching the source.
 button state.
 
 **PS/2 output** — implement it in PIO and select the mode with a button
-combination held at boot. GP20–22 are free.
+combination held at boot. GP18, GP19 and GP22 are free.
 
 **More buttons** — the gamepad descriptor already declares 16. Extend
 `BTN_PIN_LIST`, `LED_PIN_LIST` and `KEYMAP_LIST` together, and bump
-`NUM_BTN`. GP20–22 and GP26–28 are unused, though GP26–28 are the ADC pins
+`NUM_BTN`. GP18, GP19, GP22 and GP26–28 are unused, though GP26–28 are the ADC pins
 and are not 5 V tolerant.

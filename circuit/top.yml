@@ -33,11 +33,16 @@ options:
 connectors:
 
   # ---- 기판측 XH 헤더 (버튼) --------------------------------
+  #  버튼마다 IN(짝수 GP)과 LED(홀수 GP)를 Pico 2 헤더에서 바로 옆
+  #  핀으로 붙여, 버튼별 배선이 서로 교차하지 않게 한다.
+  #    BTN1–8 : GP0–GP15  (한쪽 열, 각 쌍 사이에 GND 핀)
+  #    BTN9   : GP16/GP17 (반대쪽 열)
+  #  GP15 와 GP16 은 서로 다른 열이므로 한 쌍으로 묶지 않는다.
   J1:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP9", "IN+ / GP0", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP1", "IN+ / GP0", "OUT+ / GND", "GND"]
     notes: BTN1 — 220R in series on LED_IN+, 10k pull-up on IN+
     additional_components: &res_btn
       - type: Resistor
@@ -51,7 +56,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP10", "IN+ / GP1", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP3", "IN+ / GP2", "OUT+ / GND", "GND"]
     notes: BTN2
     additional_components: *res_btn
 
@@ -59,7 +64,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP11", "IN+ / GP2", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP5", "IN+ / GP4", "OUT+ / GND", "GND"]
     notes: BTN3
     additional_components: *res_btn
 
@@ -67,7 +72,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP12", "IN+ / GP3", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP7", "IN+ / GP6", "OUT+ / GND", "GND"]
     notes: BTN4
     additional_components: *res_btn
 
@@ -75,7 +80,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP13", "IN+ / GP4", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP9", "IN+ / GP8", "OUT+ / GND", "GND"]
     notes: BTN5
     additional_components: *res_btn
 
@@ -83,7 +88,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP14", "IN+ / GP5", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP11", "IN+ / GP10", "OUT+ / GND", "GND"]
     notes: BTN6
     additional_components: *res_btn
 
@@ -91,7 +96,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP15", "IN+ / GP6", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP13", "IN+ / GP12", "OUT+ / GND", "GND"]
     notes: BTN7
     additional_components: *res_btn
 
@@ -99,7 +104,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP16", "IN+ / GP7", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP15", "IN+ / GP14", "OUT+ / GND", "GND"]
     notes: BTN8
     additional_components: *res_btn
 
@@ -107,7 +112,7 @@ connectors:
     type: XH2.54
     subtype: 4P board header
     color: WH
-    pinlabels: ["LED_IN+ / GP17", "IN+ / GP8", "OUT+ / GND", "GND"]
+    pinlabels: ["LED_IN+ / GP17", "IN+ / GP16", "OUT+ / GND", "GND"]
     notes: BTN9
     additional_components: *res_btn
 
@@ -116,7 +121,7 @@ connectors:
     type: XH2.54
     subtype: 5P board header
     color: WH
-    pinlabels: ["GND", "LED1 / 3V3", "LED2 / 3V3", "SEN1 / GP18", "SEN2 / GP19"]
+    pinlabels: ["GND", "LED1 / 3V3", "LED2 / 3V3", "SEN1 / GP20", "SEN2 / GP21"]
     notes: 1k in series on LED1+LED2, 4.7k pull-up on SEN1+SEN2
     additional_components:
       - type: Resistor

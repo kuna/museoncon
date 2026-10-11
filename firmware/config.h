@@ -50,19 +50,25 @@
 
 #define NUM_BTN 9
 
+/*
+ * Each button's switch and LED sit on adjacent GPIOs so the pair routes
+ * side by side on the board. GP15 and GP16 are on opposite header rows,
+ * so button 9 starts the other row at GP16 instead of pairing across.
+ */
+
 /* Switch inputs - active low, external 10k pull-up. */
-#define BTN_PIN_LIST { 0, 1, 2, 3, 4, 5, 6, 7, 8 }
+#define BTN_PIN_LIST { 0, 2, 4, 6, 8, 10, 12, 14, 16 }
 
 /* LED outputs - active high, 220R in series. */
-#define LED_PIN_LIST { 9, 10, 11, 12, 13, 14, 15, 16, 17 }
+#define LED_PIN_LIST { 1, 3, 5, 7, 9, 11, 13, 15, 17 }
 
 /*
  * Photointerrupters - active low, external 4.7k pull-up.
  *
  * The quadrature decoder reads both pins in a single GPIO word, so these
- * must be consecutive. GP18 = SEN1 (channel A), GP19 = SEN2 (channel B).
+ * must be consecutive. GP20 = SEN1 (channel A), GP21 = SEN2 (channel B).
  */
-#define PIN_SEN_BASE 18
+#define PIN_SEN_BASE 20
 
 /* =============================================================
  *  Key / button mapping

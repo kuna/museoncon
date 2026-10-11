@@ -63,10 +63,10 @@
  */
 
 /* Switch inputs - active low, external 10k pull-up. */
-#define BTN_PIN_LIST { 0, 2, 4, 6, 8, 10, 12, 14, 16 }
+#define BTN_PIN_LIST { 0, 2, 5, 7, 9, 11, 13, 15, 16 }
 
 /* LED outputs - active high, 220R in series. */
-#define LED_PIN_LIST { 1, 3, 5, 7, 9, 11, 13, 15, 17 }
+#define LED_PIN_LIST { 1, 3, 4, 6, 8, 10, 12, 14, 17 }
 
 /*
  * Photointerrupters - active low, external 4.7k pull-up.

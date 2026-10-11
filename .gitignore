@@ -8,3 +8,7 @@ __pycache__/
 
 # mac
 .DS_Store
+
+# firmware build
+firmware/build/
+firmware/pico_sdk_import.cmake

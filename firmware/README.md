@@ -8,24 +8,34 @@ or both at once.
 
 | Path | Purpose |
 |---|---|
-| `include/config.h` | Output mode, pin map, keymap, tuning. **The only file you should need to edit.** |
-| `src/main.c` | Core split, input scan, debounce, quadrature decode, report generation |
-| `src/usb_descriptors.c` | HID descriptors for all three modes |
-| `include/tusb_config.h` | TinyUSB config, sized from `config.h` |
+| `config.h` | Output mode, pin map, keymap, tuning. **The only file you should need to edit.** |
+| `main.c` | Core split, input scan, debounce, quadrature decode, report generation |
+| `usb_descriptors.c` | HID descriptors for all three modes |
+| `tusb_config.h` | TinyUSB config, sized from `config.h` |
 | `test_logic.c` | Host-side verification, no hardware needed |
 
 ## Build
 
-Requires pico-sdk 2.x for RP2350 support.
+Requires pico-sdk 2.x for RP2350 support, CMake, and the Arm GNU
+toolchain. On macOS:
 
 ```bash
-export PICO_SDK_PATH=/path/to/pico-sdk
-cp $PICO_SDK_PATH/external/pico_sdk_import.cmake .
-
-mkdir build && cd build
-cmake ..
-make -j
+brew install cmake picotool
+brew install --cask gcc-arm-embedded   # the formula lacks newlib
+git clone https://github.com/raspberrypi/pico-sdk.git ~/pico-sdk
+git -C ~/pico-sdk submodule update --init
 ```
+
+Then, from this directory:
+
+```bash
+export PICO_SDK_PATH=~/pico-sdk
+make build
+```
+
+`make build` copies `${PICO_SDK_PATH}/external/pico_sdk_import.cmake` here
+on first run, configures, and builds `build/bitcon.uf2`. `make clean`
+removes the build directory.
 
 Hold BOOTSEL while plugging in USB, then copy `build/bitcon.uf2` to the
 drive that appears.
@@ -33,7 +43,7 @@ drive that appears.
 To pick a mode without editing `config.h`:
 
 ```bash
-cmake -DBITCON_OUTPUT_MODE=GAMEPAD ..
+make build MODE=GAMEPAD
 ```
 
 ## Test

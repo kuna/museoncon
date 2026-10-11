@@ -24,7 +24,7 @@
 /* Override from the build system with -DOUTPUT_MODE=OUT_GAMEPAD if you
  * prefer not to edit this file, e.g. to build all three variants in CI. */
 #ifndef OUTPUT_MODE
-#define OUTPUT_MODE    OUT_COMPOSITE
+#define OUTPUT_MODE    OUT_GAMEPAD
 #endif
 
 /*
@@ -57,10 +57,10 @@
  */
 
 /* Switch inputs - active low, external 10k pull-up. */
-#define BTN_PIN_LIST { 0, 2, 4, 6, 8, 10, 12, 14, 16 }
+#define BTN_PIN_LIST { 0, 2, 5, 7, 9, 11, 13, 15, 16 }
 
 /* LED outputs - active high, 220R in series. */
-#define LED_PIN_LIST { 1, 3, 5, 7, 9, 11, 13, 15, 17 }
+#define LED_PIN_LIST { 1, 3, 4, 6, 8, 10, 12, 14, 17 }
 
 /*
  * Photointerrupters - active low, external 4.7k pull-up.

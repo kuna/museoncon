@@ -17,12 +17,12 @@ pico_sdk_init()
 set(BITCON_OUTPUT_MODE "" CACHE STRING "KEYBOARD | GAMEPAD | COMPOSITE")
 
 add_executable(bitcon
-    src/main.c
-    src/usb_descriptors.c
+    main.c
+    usb_descriptors.c
 )
 
 target_include_directories(bitcon PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${CMAKE_CURRENT_LIST_DIR}
 )
 
 if(BITCON_OUTPUT_MODE STREQUAL "KEYBOARD")

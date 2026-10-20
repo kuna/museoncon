@@ -66,13 +66,16 @@ static void gpio_setup(void)
 {
     for (int i = 0; i < NUM_BTN; i++) {
         /*
-         * Switch input. The board has an external 10k pull-up, so the
-         * internal one stays off - enabling it would put ~55k in parallel
-         * and quietly change the circuit away from what the schematic says.
+         * Switch input, active low.
+         *
+         * The internal pull-up is on by default. The board is meant to
+         * carry an external 10k, but if it is missing the pin floats and
+         * reads as permanently pressed, so the internal one earns its keep
+         * as a fail-safe. See USE_INTERNAL_PULLUP_BTN in config.h.
          */
         gpio_init(BTN_PINS[i]);
         gpio_set_dir(BTN_PINS[i], GPIO_IN);
-        gpio_set_pulls(BTN_PINS[i], false, false);
+        gpio_set_pulls(BTN_PINS[i], USE_INTERNAL_PULLUP_BTN ? true : false, false);
         gpio_set_input_hysteresis_enabled(BTN_PINS[i], true);
 
         /*
@@ -93,11 +96,17 @@ static void gpio_setup(void)
         g_led_mask |= (1u << LED_PINS[i]);
     }
 
+    /*
+     * Photointerrupter inputs, active low. The phototransistor is open
+     * collector and cannot drive high at all, so a pull-up is mandatory
+     * here rather than merely advisable. The internal one is a bring-up
+     * crutch; fit the external 4.7k for usable edge rates.
+     */
     for (int i = 0; i < 2; i++) {
         const uint8_t pin = PIN_SEN_BASE + i;
         gpio_init(pin);
         gpio_set_dir(pin, GPIO_IN);
-        gpio_set_pulls(pin, false, false);
+        gpio_set_pulls(pin, USE_INTERNAL_PULLUP_SEN ? true : false, false);
         gpio_set_input_hysteresis_enabled(pin, true);
     }
 }

@@ -120,6 +120,42 @@
 #define GAMEPAD_BUTTON_COUNT 16
 
 /* =============================================================
+ *  Input pull-ups
+ * ============================================================= */
+
+/*
+ * Both input groups are active low: the switch shorts its pin to ground,
+ * and the phototransistor sinks its pin to ground. Something has to hold
+ * the line high the rest of the time, or the pin floats, reads as
+ * permanently pressed, and picks up mains hum and crosstalk from the
+ * neighbouring LED wires.
+ *
+ * These enable the RP2350 internal pull-ups, the equivalent of Arduino's
+ * INPUT_PULLUP. They default to on so the firmware works on a board where
+ * the external resistors are missing, mis-wired, or a harness wire has
+ * broken. Leaving them on alongside correctly fitted external resistors is
+ * harmless: 10k in parallel with the internal ~55k gives about 8.5k, which
+ * changes nothing that matters.
+ */
+#ifndef USE_INTERNAL_PULLUP_BTN
+#define USE_INTERNAL_PULLUP_BTN 1
+#endif
+
+/*
+ * The sensor case differs in kind, not just degree.
+ *
+ * A phototransistor is open collector: it can only pull down, so the
+ * pull-up is the only thing that ever creates a logic high. The internal
+ * one will make it work, but at roughly 55k the rise time stretches into
+ * tens of microseconds, smearing edges at high turntable speed and
+ * eventually dropping counts. Treat this as a bring-up crutch and fit the
+ * external 4.7k resistors before tuning anything.
+ */
+#ifndef USE_INTERNAL_PULLUP_SEN
+#define USE_INTERNAL_PULLUP_SEN 1
+#endif
+
+/* =============================================================
  *  Timing
  * ============================================================= */
 

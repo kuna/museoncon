@@ -38,15 +38,26 @@ static const int8_t QDEC[16] = {
 
 /* ============================================================= */
 
-static int32_t run_quad(const uint8_t *seq, int n)
+static int32_t run_quad_counting(const uint8_t *seq, int n, uint32_t *errors)
 {
     int32_t pos = 0;
     uint8_t prev = seq[0];
+    *errors = 0;
     for (int i = 1; i < n; i++) {
-        pos += QDEC[(prev << 2) | seq[i]];
-        prev = seq[i];
+        if (seq[i] != prev) {
+            const int8_t step = QDEC[(prev << 2) | seq[i]];
+            if (step == 0) (*errors)++;
+            pos += step;
+            prev = seq[i];
+        }
     }
     return pos;
+}
+
+static int32_t run_quad(const uint8_t *seq, int n)
+{
+    uint32_t errors;
+    return run_quad_counting(seq, n, &errors);
 }
 
 static void test_quadrature(void)
@@ -71,6 +82,15 @@ static void test_quadrature(void)
     /* 0->1:+1 1->3:+1 3->0:invalid 0->1:+1 1->3:+1 3->2:+1 = +5 */
     const uint8_t mixed[] = { 0, 1, 3, 0, 1, 3, 2 };
     CHECK(run_quad(mixed, 7) == 5, "decoding recovers after an invalid step");
+
+    uint32_t errors;
+    run_quad_counting(mixed, 7, &errors);
+    CHECK(errors == 1, "an invalid step is counted once");
+    run_quad_counting(fwd3, 13, &errors);
+    CHECK(errors == 0, "clean rotation counts no errors");
+    const uint8_t held[] = { 0, 0, 0, 1, 1, 1 };
+    run_quad_counting(held, 6, &errors);
+    CHECK(errors == 0, "an unchanged sample is not an error");
 
     const uint8_t gray[4] = { 0, 1, 3, 2 };
     for (int i = 0; i < 4; i++) {

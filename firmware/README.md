@@ -2,16 +2,18 @@
 
 Rhythm game controller: 9 illuminated buttons plus a photointerrupter
 turntable, on a Raspberry Pi Pico 2. Runs as a USB HID keyboard, gamepad,
-or both at once.
+or both at once, plus a serial port for the
+[configurator page](../configurator/index.html).
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
-| `config.h` | Output mode, pin map, keymap, tuning. **The only file you should need to edit.** |
-| `main.c` | Core split, input scan, debounce, quadrature decode, report generation |
-| `usb_descriptors.c` | HID descriptors for all three modes |
-| `tusb_config.h` | TinyUSB config, sized from `config.h` |
+| `config.h` | Default output mode, pin map, keymap, tuning. **The only file you should need to edit.** |
+| `main.c` | Core split, input scan, debounce, quadrature decode, report generation, configurator port |
+| `settings.c` | Stored output mode, kept in the last flash sector |
+| `usb_descriptors.c` | USB descriptors for all three modes, each with the serial port |
+| `tusb_config.h` | TinyUSB config, sized for composite mode |
 | `test_logic.c` | Host-side verification, no hardware needed |
 
 ## Build
@@ -40,11 +42,14 @@ removes the build directory.
 Hold BOOTSEL while plugging in USB, then copy `build/bitcon.uf2` to the
 drive that appears.
 
-To pick a mode without editing `config.h`:
+To change the mode a fresh board boots in without editing `config.h`:
 
 ```bash
-make build MODE=GAMEPAD
+make build MODE=KEYBOARD
 ```
+
+Once a board is running, use the configurator's "BOOTSEL 모드로 재시작"
+button (or send `bootsel`) instead of opening the case to reach BOOTSEL.
 
 ## Test
 
@@ -52,13 +57,16 @@ make build MODE=GAMEPAD
 gcc -O2 -Wall -Wextra -o test_logic test_logic.c && ./test_logic
 ```
 
-Covers quadrature decoding, turntable event generation, axis wrapping,
+Covers quadrature decoding and invalid-step counting, turntable events, axis wrapping,
 debounce across clock rollover, and both report formats. Useful for
 sanity-checking parameter changes before you reflash.
 
 ## Output modes
 
-Set `OUTPUT_MODE` in `config.h`.
+Change the mode from the configurator page. The board stores it in flash
+and reboots so the host re-reads the USB layout; the stored mode survives
+unplugging and firmware updates. `DEFAULT_OUTPUT_MODE` in `config.h` (or
+`make build MODE=...`) only decides the mode before anything is stored.
 
 | Mode | What the host sees | Turntable |
 |---|---|---|
@@ -66,9 +74,34 @@ Set `OUTPUT_MODE` in `config.h`.
 | `OUT_GAMEPAD` | 16-button gamepad, X/Y axes | Axis or two buttons |
 | `OUT_COMPOSITE` | Both, as independent interfaces | Both representations at once |
 
-Composite is the default. Two HID interfaces cost one extra endpoint and
-let you switch between a keyboard-driven game and a gamepad-driven one
-without reflashing.
+Gamepad is the default. Every mode also exposes a CDC serial port, the
+configurator port.
+
+## Configurator port
+
+A line protocol over the CDC port, one command per line:
+
+| Command | Reply |
+|---|---|
+| `info` | `info fw=… mode=… default=… buttons=9 cpr=192 serial=…` |
+| `mode` | `mode gamepad` |
+| `mode keyboard\|gamepad\|composite` | `ok mode …`, plus ` reboot` when it changed |
+| `stream on\|off` | `ok stream on\|off` |
+| `state` | one `state` line |
+| `bootsel` | `ok bootsel`, then reboots into the UF2 bootloader |
+
+While streaming, the board sends a `state` line whenever input changes (at
+most 100 Hz, at least every 500 ms):
+
+```
+state keys=201 raw=001 sen=2 tt=-37 err=0
+```
+
+`keys` is the debounced key bitmap (bits 0–8 buttons, 9 CW, 10 CCW), `raw`
+the button pins before debounce, `sen` the two sensor levels (bit 0 =
+SEN1), `tt` the quadrature position, and `err` how many quadrature
+transitions were dropped as invalid since boot. Closing the port stops the
+stream. Any serial terminal works too, e.g. `screen /dev/cu.usbmodem* 115200`.
 
 ### Turntable representation
 
@@ -93,7 +126,7 @@ axes.
 `core1` runs a free-running input loop, uninterrupted by the USB stack, so
 the scan interval stays even. `core0` runs TinyUSB and builds reports.
 
-They share two 32-bit words. RP2350 SRAM is uncached and aligned 32-bit
+They share a handful of 32-bit words. RP2350 SRAM is uncached and aligned 32-bit
 accesses are atomic, so no lock is needed. The words are sampled
 independently, meaning buttons and turntable position can be one core1
 iteration apart — sub-microsecond, and irrelevant here.
@@ -137,9 +170,13 @@ both scratch directions exceeds that, so the keyboard interface uses a
 
 ### Per-mode PIDs
 
-Windows caches HID descriptors against VID/PID. Reflashing a different mode
-under the same PID leaves the stale descriptor in place, producing symptoms
-that look like firmware bugs. Each mode therefore reports its own PID.
+Windows caches HID descriptors against VID/PID. Switching mode under the
+same PID leaves the stale descriptor in place, producing symptoms that look
+like firmware bugs. Each mode therefore reports its own PID, and
+`bcdDevice` is bumped whenever the interface layout changes.
+
+The browser treats each PID as a separate device too, so the configurator
+asks you to pick the port once more the first time you use a new mode.
 
 ## Tuning
 

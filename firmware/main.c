@@ -2,28 +2,41 @@
  * main.c - BitCon firmware for RP2350 (Raspberry Pi Pico 2).
  *
  * 9 illuminated buttons + a 2-channel photointerrupter turntable, exposed
- * as a USB HID keyboard, gamepad, or both. See config.h.
+ * as a USB HID keyboard, gamepad, or both, plus a serial port for the
+ * configurator page. See config.h.
  *
  * Core split:
  *   core1 - free-running input scan, debounce, quadrature decode, LEDs.
- *   core0 - TinyUSB stack and HID report generation.
+ *   core0 - TinyUSB stack, HID report generation, configurator port.
  *
- * The two cores communicate through two 32-bit words. RP2350 SRAM is
+ * The cores communicate through a handful of 32-bit words. RP2350 SRAM is
  * uncached and aligned 32-bit accesses are atomic, so no lock is needed.
  * The words are sampled independently, so buttons and turntable position
  * can be up to one core1 iteration apart - sub-microsecond, irrelevant here.
  */
 
+#include <ctype.h>
+#include <inttypes.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
+#include "pico/bootrom.h"
+#include "pico/unique_id.h"
 #include "hardware/gpio.h"
 #include "tusb.h"
 
 #include "config.h"
+#include "settings.h"
+#include "usb_descriptors.h"
+
+#ifndef BITCON_FW_VERSION
+#define BITCON_FW_VERSION "dev"
+#endif
 
 /* =============================================================
  *  Shared state
@@ -35,6 +48,15 @@ static volatile uint32_t g_key_state = 0;
 /* Accumulated quadrature position. Written by core1. */
 static volatile int32_t g_tt_pos = 0;
 
+/* Button pins before debounce, bit i = button i+1. Written by core1. */
+static volatile uint32_t g_raw_state = 0;
+
+/* Sensor levels, bit 0 = SEN1 (A), bit 1 = SEN2 (B). Written by core1. */
+static volatile uint32_t g_sen_state = 0;
+
+/* Quadrature transitions dropped as invalid since boot. Written by core1. */
+static volatile uint32_t g_tt_errors = 0;
+
 /* =============================================================
  *  Quadrature decode table
  * ============================================================= */
@@ -44,7 +66,8 @@ static volatile int32_t g_tt_pos = 0;
  *
  * Forward Gray sequence: 00 -> 01 -> 11 -> 10 -> 00.
  * Invalid transitions (both bits changing at once, which means a sample was
- * missed or the signal glitched) decode to 0 and are simply dropped.
+ * missed or the signal glitched) decode to 0 and are dropped. They are also
+ * counted, so the configurator can show a sensor that is misbehaving.
  */
 static const int8_t QDEC[16] = {
      0, +1, -1,  0,
@@ -137,6 +160,7 @@ static void core1_main(void)
     int32_t  tt_pos = 0;              /* accumulated position            */
     int32_t  tt_ref = 0;              /* position at last emitted event  */
     uint64_t tt_hold[2] = { 0, 0 };   /* [0] = CW, [1] = CCW             */
+    uint32_t tt_errors = 0;           /* invalid transitions             */
 
     uint8_t q_prev = (uint8_t)((gpio_get_all() >> PIN_SEN_BASE) & 0x3u);
 
@@ -144,12 +168,14 @@ static void core1_main(void)
         const uint64_t now_us = time_us_64();
         const uint32_t gpio   = gpio_get_all();
 
-        uint32_t keys    = 0;
-        uint32_t led_val = 0;
+        uint32_t keys     = 0;
+        uint32_t raw_bits = 0;
+        uint32_t led_val  = 0;
 
         /* ---- buttons: eager debounce ---- */
         for (int i = 0; i < NUM_BTN; i++) {
             const bool raw = ((gpio >> BTN_PINS[i]) & 1u) == 0u;  /* active low */
+            if (raw) raw_bits |= (1u << i);
 
             if (raw != btn_state[i] && now_us >= lock_until[i]) {
                 btn_state[i]  = raw;
@@ -168,7 +194,9 @@ static void core1_main(void)
         /* ---- turntable: quadrature decode ---- */
         const uint8_t q = (uint8_t)((gpio >> PIN_SEN_BASE) & 0x3u);
         if (q != q_prev) {
-            tt_pos += QDEC[(q_prev << 2) | q];
+            const int8_t step = QDEC[(q_prev << 2) | q];
+            if (step == 0) tt_errors++;  /* both channels changed at once */
+            tt_pos += step;
             q_prev  = q;
         }
 
@@ -192,14 +220,15 @@ static void core1_main(void)
 
         g_key_state = keys;
         g_tt_pos    = tt_pos;
+        g_raw_state = raw_bits;
+        g_sen_state = q;
+        g_tt_errors = tt_errors;
     }
 }
 
 /* =============================================================
  *  core0 - keyboard reports
  * ============================================================= */
-
-#if BITCON_HAS_KEYBOARD
 
 /*
  * NKRO bitmap report: 128 bits, one per keycode. Unlike the 6-key-rollover
@@ -210,9 +239,9 @@ static void core1_main(void)
 
 static const uint8_t KEYMAP[NUM_KEYS] = KEYMAP_LIST;
 
-static void keyboard_task(void)
+static void keyboard_task(uint8_t instance)
 {
-    if (!tud_hid_n_ready(ITF_KEYBOARD)) return;
+    if (!tud_hid_n_ready(instance)) return;
 
     const uint32_t state = g_key_state;
 
@@ -229,19 +258,15 @@ static void keyboard_task(void)
 
     if (primed && memcmp(report, prev, sizeof(report)) == 0) return;
 
-    if (tud_hid_n_report(ITF_KEYBOARD, 0, report, sizeof(report))) {
+    if (tud_hid_n_report(instance, 0, report, sizeof(report))) {
         memcpy(prev, report, sizeof(report));
         primed = true;
     }
 }
 
-#endif /* BITCON_HAS_KEYBOARD */
-
 /* =============================================================
  *  core0 - gamepad reports
  * ============================================================= */
-
-#if BITCON_HAS_GAMEPAD
 
 typedef struct __attribute__((packed)) {
     uint16_t buttons;  /* 16 buttons, bit 0 = button 1 */
@@ -263,9 +288,9 @@ static uint8_t turntable_axis(void)
 }
 #endif
 
-static void gamepad_task(void)
+static void gamepad_task(uint8_t instance)
 {
-    if (!tud_hid_n_ready(ITF_GAMEPAD)) return;
+    if (!tud_hid_n_ready(instance)) return;
 
     const uint32_t state = g_key_state;
 
@@ -292,17 +317,231 @@ static void gamepad_task(void)
 
     if (primed && memcmp(&report, &prev, sizeof(report)) == 0) return;
 
-    if (tud_hid_n_report(ITF_GAMEPAD, 0, &report, sizeof(report))) {
+    if (tud_hid_n_report(instance, 0, &report, sizeof(report))) {
         memcpy(&prev, &report, sizeof(report));
         primed = true;
     }
 }
 
-#endif /* BITCON_HAS_GAMEPAD */
+/* =============================================================
+ *  core0 - configurator port
+ * ============================================================= */
+
+/*
+ * Line protocol on the CDC serial port. One command per line, one reply
+ * line per command:
+ *
+ *   info           -> info fw=<ver> mode=<m> default=<m> buttons=9 cpr=192
+ *                     serial=<id>
+ *   mode           -> mode <m>
+ *   mode <m>       -> ok mode <m>          already running in <m>
+ *                     ok mode <m> reboot   stored; reboots to re-enumerate
+ *   stream on|off  -> ok stream on|off
+ *   state          -> state ...            one snapshot
+ *   bootsel        -> ok bootsel           reboots into the UF2 bootloader
+ *   anything else  -> err <reason>
+ *
+ * <m> is keyboard, gamepad or composite. While streaming, a state line goes
+ * out whenever the input changes, at most every STREAM_MIN_US and at least
+ * every STREAM_IDLE_US:
+ *
+ *   state keys=<hex> raw=<hex> sen=<0-3> tt=<int> err=<uint>
+ *
+ * keys is the debounced key bitmap (bits 0-8 buttons, 9 CW, 10 CCW), raw the
+ * button pins before debounce, sen the sensor levels (bit 0 = SEN1), tt the
+ * quadrature position and err the invalid transitions since boot.
+ */
+
+#define STREAM_MIN_US    10000   /* 100 Hz cap                         */
+#define STREAM_IDLE_US   500000  /* heartbeat while nothing changes    */
+#define REBOOT_DELAY_US  100000  /* lets the reply reach the host first */
+
+typedef struct {
+    uint32_t keys;
+    uint32_t raw;
+    uint32_t sen;
+    int32_t  tt;
+    uint32_t err;
+} input_snapshot_t;
+
+static char   g_line[64];
+static size_t g_line_len  = 0;
+static bool   g_streaming = false;
+
+typedef enum { REBOOT_NONE, REBOOT_SAVE_MODE, REBOOT_BOOTSEL } reboot_t;
+
+static reboot_t g_reboot = REBOOT_NONE;
+static uint8_t  g_reboot_mode;
+static uint64_t g_reboot_at;
+
+static void port_printf(const char *fmt, ...)
+{
+    char buf[128];
+    va_list ap;
+    va_start(ap, fmt);
+    const int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+
+    if (n > 0) {
+        tud_cdc_write(buf, (uint32_t)(n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1));
+        tud_cdc_write_flush();
+    }
+}
+
+static input_snapshot_t input_snapshot(void)
+{
+    return (input_snapshot_t){
+        .keys = g_key_state,
+        .raw  = g_raw_state,
+        .sen  = g_sen_state,
+        .tt   = g_tt_pos,
+        .err  = g_tt_errors,
+    };
+}
+
+static int format_state(char *buf, size_t size, const input_snapshot_t *s)
+{
+    return snprintf(buf, size,
+                    "state keys=%03" PRIx32 " raw=%03" PRIx32 " sen=%" PRIu32
+                    " tt=%" PRId32 " err=%" PRIu32 "\n",
+                    s->keys, s->raw, s->sen, s->tt, s->err);
+}
+
+static void schedule_reboot(reboot_t kind, uint8_t mode)
+{
+    g_reboot      = kind;
+    g_reboot_mode = mode;
+    g_reboot_at   = time_us_64() + REBOOT_DELAY_US;
+}
+
+static void handle_mode(const char *arg)
+{
+    const uint8_t current = settings_mode();
+
+    if (arg == NULL) {
+        port_printf("mode %s\n", settings_mode_name(current));
+        return;
+    }
+
+    uint8_t mode;
+    if (!settings_mode_from_name(arg, &mode)) {
+        port_printf("err unknown mode: %s\n", arg);
+    } else if (mode == current) {
+        port_printf("ok mode %s\n", arg);
+    } else {
+        port_printf("ok mode %s reboot\n", arg);
+        schedule_reboot(REBOOT_SAVE_MODE, mode);
+    }
+}
+
+static void handle_command(char *line)
+{
+    const char *cmd = strtok(line, " \t");
+    const char *arg = strtok(NULL, " \t");
+    if (cmd == NULL) return;
+
+    if (strcmp(cmd, "info") == 0) {
+        char serial[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
+        pico_get_unique_board_id_string(serial, sizeof(serial));
+        port_printf("info fw=%s mode=%s default=%s buttons=%d cpr=%d serial=%s\n",
+                    BITCON_FW_VERSION, settings_mode_name(settings_mode()),
+                    settings_mode_name(DEFAULT_OUTPUT_MODE), NUM_BTN,
+                    TT_COUNTS_PER_REV, serial);
+    } else if (strcmp(cmd, "mode") == 0) {
+        handle_mode(arg);
+    } else if (strcmp(cmd, "stream") == 0) {
+        if (arg != NULL && strcmp(arg, "on") == 0) {
+            g_streaming = true;
+        } else if (arg != NULL && strcmp(arg, "off") == 0) {
+            g_streaming = false;
+        } else {
+            port_printf("err usage: stream on|off\n");
+            return;
+        }
+        port_printf("ok stream %s\n", arg);
+    } else if (strcmp(cmd, "state") == 0) {
+        char buf[96];
+        const input_snapshot_t s = input_snapshot();
+        format_state(buf, sizeof(buf), &s);
+        port_printf("%s", buf);
+    } else if (strcmp(cmd, "bootsel") == 0) {
+        port_printf("ok bootsel\n");
+        schedule_reboot(REBOOT_BOOTSEL, 0);
+    } else {
+        port_printf("err unknown command: %s\n", cmd);
+    }
+}
+
+static void stream_task(void)
+{
+    static input_snapshot_t last;
+    static uint64_t         last_sent = 0;
+
+    if (!g_streaming) return;
+
+    const uint64_t now = time_us_64();
+    if (now - last_sent < STREAM_MIN_US) return;
+
+    const input_snapshot_t s = input_snapshot();
+    const bool changed = memcmp(&s, &last, sizeof(s)) != 0;
+    if (!changed && now - last_sent < STREAM_IDLE_US) return;
+
+    char buf[96];
+    const int n = format_state(buf, sizeof(buf), &s);
+
+    /*
+     * Drop the frame rather than wait when the host is not keeping up.
+     * Core0 also feeds the HID reports, and the next frame carries the
+     * same state anyway.
+     */
+    if (n <= 0 || tud_cdc_write_available() < (uint32_t)n) return;
+
+    tud_cdc_write(buf, (uint32_t)n);
+    tud_cdc_write_flush();
+    last      = s;
+    last_sent = now;
+}
+
+static void config_port_task(void)
+{
+    uint8_t  buf[64];
+    uint32_t n;
+
+    while ((n = tud_cdc_read(buf, sizeof(buf))) > 0) {
+        for (uint32_t i = 0; i < n; i++) {
+            const char c = (char)buf[i];
+            if (c == '\r' || c == '\n') {
+                g_line[g_line_len] = '\0';
+                if (g_line_len > 0) handle_command(g_line);
+                g_line_len = 0;
+            } else if (g_line_len < sizeof(g_line) - 1) {
+                g_line[g_line_len++] = (char)tolower((unsigned char)c);
+            }
+        }
+    }
+
+    stream_task();
+
+    if (g_reboot != REBOOT_NONE && time_us_64() >= g_reboot_at) {
+        if (g_reboot == REBOOT_BOOTSEL) reset_usb_boot(0, 0);
+        settings_save_and_reboot(g_reboot_mode);
+    }
+}
 
 /* =============================================================
  *  TinyUSB callbacks
  * ============================================================= */
+
+void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts)
+{
+    (void)itf; (void)rts;
+
+    /* The host closed the port. Stop streaming into a FIFO nobody reads. */
+    if (!dtr) {
+        g_streaming = false;
+        g_line_len  = 0;
+    }
+}
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
                                hid_report_type_t report_type,
@@ -331,20 +570,22 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
 
 int main(void)
 {
+    settings_load();
     gpio_setup();
 
     tud_init(BOARD_TUD_RHPORT);
 
     multicore_launch_core1(core1_main);
 
+    const int keyboard = usb_hid_keyboard_instance();
+    const int gamepad  = usb_hid_gamepad_instance();
+
     while (true) {
         tud_task();
 
-#if BITCON_HAS_KEYBOARD
-        keyboard_task();
-#endif
-#if BITCON_HAS_GAMEPAD
-        gamepad_task();
-#endif
+        if (keyboard >= 0) keyboard_task((uint8_t)keyboard);
+        if (gamepad  >= 0) gamepad_task((uint8_t)gamepad);
+
+        config_port_task();
     }
 }

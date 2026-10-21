@@ -48,7 +48,7 @@ To change the mode a fresh board boots in without editing `config.h`:
 make build MODE=KEYBOARD
 ```
 
-Once a board is running, use the configurator's "BOOTSEL 모드로 재시작"
+Once a board is running, use the configurator's "Restart into BOOTSEL"
 button (or send `bootsel`) instead of opening the case to reach BOOTSEL.
 
 ## Test
@@ -88,6 +88,7 @@ A line protocol over the CDC port, one command per line:
 | `mode keyboard\|gamepad\|composite` | `ok mode …`, plus ` reboot` when it changed |
 | `stream on\|off` | `ok stream on\|off` |
 | `state` | one `state` line |
+| `identify` | `ok identify`, then every LED blinks for 2 s |
 | `bootsel` | `ok bootsel`, then reboots into the UF2 bootloader |
 
 While streaming, the board sends a `state` line whenever input changes (at
@@ -177,6 +178,15 @@ like firmware bugs. Each mode therefore reports its own PID, and
 
 The browser treats each PID as a separate device too, so the configurator
 asks you to pick the port once more the first time you use a new mode.
+
+### Several controllers
+
+Each board reports its RP2350 unique ID as the USB serial number, so the
+host gives every controller its own serial port and each board keeps its
+own stored mode. The configurator talks to one controller per tab. After a
+mode change it reconnects only to the controller with the same serial
+number, so a second controller, or another tab, cannot take its place.
+`identify` (the "Blink LEDs" button) shows which one a tab is connected to.
 
 ## Tuning
 

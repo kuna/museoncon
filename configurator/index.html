@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BitCon 설정</title>
+<title>BitCon Configurator</title>
 <style>
   :root {
     --bg: #f4f5f8;
@@ -46,8 +46,8 @@
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-          "Noto Sans KR", "Malgun Gothic", "Segoe UI", sans-serif;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
   }
   button, input { font: inherit; color: inherit; }
 
@@ -162,8 +162,8 @@
   .stat.lit { border-color: var(--accent); background: var(--accent-soft); }
   .stat.alert .value { color: var(--warn); }
 
-  /* ---- info / mode ---- */
-  dl.info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 14px; }
+  /* ---- device / mode ---- */
+  dl.info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0 0 14px; font-size: 14px; }
   dl.info dt { color: var(--muted); }
   dl.info dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
 
@@ -204,12 +204,12 @@
 
 <header>
   <div class="head-text">
-    <h1>BitCon 설정</h1>
-    <p>출력 모드를 바꾸고 입력 상태를 확인해요. 컨트롤러를 USB로 연결한 뒤 연결 버튼을 누르세요.</p>
+    <h1>BitCon Configurator</h1>
+    <p>Change the output mode and watch live input. Plug in the controller, then press Connect.</p>
   </div>
   <div class="conn">
-    <span class="pill" id="status" data-state="off" aria-live="polite">연결 안 됨</span>
-    <button class="btn primary" id="connect">연결</button>
+    <span class="pill" id="status" data-state="off" aria-live="polite">Not connected</span>
+    <button class="btn primary" id="connect">Connect</button>
   </div>
 </header>
 
@@ -218,29 +218,29 @@
 <main>
   <div class="col">
     <section class="card disabled-when-off">
-      <h2>입력 상태 <small id="rate">—</small></h2>
+      <h2>Input <small id="rate">—</small></h2>
       <div class="pad" id="pad"></div>
       <div class="legend">
-        <span><i style="background: var(--accent)"></i>입력됨 (디바운스 후)</span>
-        <span><i style="background: var(--raw); border-radius: 50%"></i>핀 신호 (디바운스 전)</span>
+        <span><i style="background: var(--accent)"></i>Pressed (debounced)</span>
+        <span><i style="background: var(--raw); border-radius: 50%"></i>Pin signal (raw)</span>
       </div>
 
       <div class="tt">
-        <svg viewBox="-100 -100 200 200" aria-label="턴테이블">
+        <svg viewBox="-100 -100 200 200" aria-label="Turntable">
           <circle class="disc" r="94"/>
           <g id="disc"></g>
           <circle class="hub" r="46"/>
           <text class="pos" id="tt-pos" y="6">0</text>
-          <text class="pos-label" y="24">위치</text>
+          <text class="pos-label" y="24">position</text>
         </svg>
         <div class="stats">
-          <div class="stat" id="cw"><div class="label">시계 방향 (CW)</div><div class="value">—</div></div>
-          <div class="stat" id="ccw"><div class="label">반시계 방향 (CCW)</div><div class="value">—</div></div>
+          <div class="stat" id="cw"><div class="label">Clockwise (CW)</div><div class="value">—</div></div>
+          <div class="stat" id="ccw"><div class="label">Counter-clockwise (CCW)</div><div class="value">—</div></div>
           <div class="stat" id="sen-a"><div class="label">SEN1 (A)</div><div class="value">—</div></div>
           <div class="stat" id="sen-b"><div class="label">SEN2 (B)</div><div class="value">—</div></div>
-          <div class="stat" id="turns"><div class="label">회전 수</div><div class="value">—</div></div>
-          <div class="stat" id="errors" title="두 센서 신호가 한 번에 같이 바뀐 횟수예요. 계속 늘어나면 센서 위치나 신호를 확인하세요.">
-            <div class="label">잘못된 전이</div><div class="value">—</div>
+          <div class="stat" id="turns"><div class="label">Turns</div><div class="value">—</div></div>
+          <div class="stat" id="errors" title="Times both sensor signals changed at once. If this keeps rising, check sensor alignment and wiring.">
+            <div class="label">Invalid steps</div><div class="value">—</div>
           </div>
         </div>
       </div>
@@ -248,56 +248,59 @@
 
     <section class="card">
       <div class="row">
-        <h2 style="margin: 0">시리얼 로그</h2>
-        <label class="check"><input type="checkbox" id="show-state"> state 줄 표시</label>
+        <h2 style="margin: 0">Serial log</h2>
+        <label class="check"><input type="checkbox" id="show-state"> Show state lines</label>
       </div>
       <div class="log" id="log" aria-live="off"></div>
       <form class="send" id="send">
-        <input id="cmd" placeholder="명령어 (예: info, mode, state)" autocomplete="off" spellcheck="false">
-        <button class="btn" type="submit">보내기</button>
+        <input id="cmd" placeholder="Command (e.g. info, mode, state)" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Send</button>
       </form>
     </section>
   </div>
 
   <div class="col">
     <section class="card disabled-when-off">
-      <h2>기기 정보</h2>
+      <h2>Device</h2>
       <dl class="info">
-        <dt>현재 모드</dt><dd id="i-mode">—</dd>
-        <dt>펌웨어</dt><dd id="i-fw">—</dd>
-        <dt>기본 모드</dt><dd id="i-default">—</dd>
-        <dt>버튼 수</dt><dd id="i-buttons">—</dd>
-        <dt>시리얼</dt><dd id="i-serial">—</dd>
+        <dt>Mode</dt><dd id="i-mode">—</dd>
+        <dt>Firmware</dt><dd id="i-fw">—</dd>
+        <dt>Default mode</dt><dd id="i-default">—</dd>
+        <dt>Buttons</dt><dd id="i-buttons">—</dd>
+        <dt>Serial</dt><dd id="i-serial">—</dd>
       </dl>
+      <button class="btn" id="identify">Blink LEDs</button>
+      <p class="hint">Blinks this controller's LEDs for 2 seconds, so you can tell which one this tab is connected to.</p>
+      <p class="hint">Several controllers? Press Disconnect, then Connect and pick another port. Each tab holds one controller, so you can also open one tab per controller.</p>
     </section>
 
     <section class="card disabled-when-off">
-      <h2>출력 모드</h2>
+      <h2>Output mode</h2>
       <div class="modes" id="modes">
         <label class="mode">
           <input type="radio" name="mode" value="gamepad">
           <b>GAMEPAD</b>
-          <span>게임패드 버튼 1–9, 턴테이블은 X축</span>
+          <span>Gamepad buttons 1–9, turntable on the X axis</span>
         </label>
         <label class="mode">
           <input type="radio" name="mode" value="keyboard">
           <b>KEYBOARD</b>
-          <span>A S D F Space J K L ; · 턴테이블은 Q / W</span>
+          <span>A S D F Space J K L ; · turntable on Q / W</span>
         </label>
         <label class="mode">
           <input type="radio" name="mode" value="composite">
           <b>COMPOSITE</b>
-          <span>키보드와 게임패드로 동시에 입력</span>
+          <span>Keyboard and gamepad at the same time</span>
         </label>
       </div>
-      <button class="btn primary" id="apply" disabled>모드 적용</button>
-      <p class="hint">적용하면 컨트롤러가 재시작되고, 설정은 컨트롤러에 저장돼요. 다시 연결하거나 펌웨어를 업데이트해도 유지돼요.</p>
+      <button class="btn primary" id="apply" disabled>Apply mode</button>
+      <p class="hint">The controller restarts to apply the change. The mode is stored on the controller, so it survives unplugging and firmware updates.</p>
     </section>
 
     <section class="card disabled-when-off">
-      <h2>펌웨어 업데이트</h2>
-      <button class="btn" id="bootsel">BOOTSEL 모드로 재시작</button>
-      <p class="hint">컨트롤러를 열지 않고 업데이트 모드로 들어가요. <b>RP2350</b> 드라이브가 나타나면 <code>bitcon.uf2</code>를 복사하세요.</p>
+      <h2>Firmware update</h2>
+      <button class="btn" id="bootsel">Restart into BOOTSEL</button>
+      <p class="hint">Enters update mode without opening the case. When the <b>RP2350</b> drive appears, copy <code>bitcon.uf2</code> onto it.</p>
     </section>
   </div>
 </main>
@@ -319,6 +322,8 @@
   let reader = null;
   let writer = null;
   let rebooting = null;      // null | 'mode' | 'bootsel'
+  let expectSerial = null;   // controller we are waiting on after a mode change
+  let autoConnected = false; // current port was picked up while waiting
   let reconnectTimer = null;
   let info = null;
   let input = null;
@@ -364,7 +369,7 @@
     $('status').dataset.state = state;
     $('status').textContent = text;
     document.body.classList.toggle('online', state === 'connected');
-    $('connect').textContent = port ? '연결 해제' : '연결';
+    $('connect').textContent = port ? 'Disconnect' : 'Connect';
   }
 
   function notify(text, warn = false) {
@@ -384,6 +389,8 @@
     while (box.childElementCount > LOG_LIMIT) box.firstElementChild.remove();
     if (atBottom) box.scrollTop = box.scrollHeight;
   }
+
+  const serialTail = (serial) => (serial ? serial.slice(-4) : '?');
 
   /* ---------- protocol ---------- */
 
@@ -417,22 +424,46 @@
     log(line, kind === 'err' ? 'err' : '');
 
     if (kind === 'info') {
-      info = fields(line);
-      const cpr = parseInt(info.cpr, 10);
-      if (cpr >= 4) drawDisc(Math.round(cpr / 4));
-      showInfo();
+      handleInfo(fields(line));
     } else if (kind === 'mode') {
       if (info) { info.mode = line.split(' ')[1]; showInfo(); }
     } else if (line.startsWith('ok mode ') && line.endsWith(' reboot')) {
       rebooting = 'mode';
-      setStatus('busy', '재시작 중…');
-      notify('모드를 저장했어요. 컨트롤러가 재시작되면 자동으로 다시 연결해요.');
+      expectSerial = info?.serial || null;
+      setStatus('busy', 'Restarting…');
+      notify('Mode saved. The controller is restarting and will reconnect automatically.');
     } else if (line === 'ok bootsel') {
       rebooting = 'bootsel';
-      setStatus('busy', '업데이트 모드로 전환 중…');
+      expectSerial = null;
+      setStatus('busy', 'Entering bootloader…');
     } else if (kind === 'err') {
-      notify(`컨트롤러 응답: ${line}`, true);
+      notify(`Controller replied: ${line}`, true);
     }
+  }
+
+  function handleInfo(next) {
+    if (expectSerial) {
+      if (next.serial === expectSerial) {
+        expectSerial = null;
+        notify('Restart finished. Connected in the new mode.');
+      } else if (autoConnected) {
+        // Another controller showed up while ours was restarting. Let it go
+        // and keep waiting, so the page never silently swaps controllers.
+        log(`released controller …${serialTail(next.serial)}`, 'sys');
+        rebooting = 'mode';
+        reader?.cancel().catch(() => {});
+        notify(`Another controller (serial …${serialTail(next.serial)}) connected first, so it was released. Still waiting for …${serialTail(expectSerial)}.`, true);
+        return;
+      } else {
+        expectSerial = null;  // the user picked a different controller on purpose
+      }
+    }
+
+    info = next;
+    const cpr = parseInt(info.cpr, 10);
+    if (cpr >= 4) drawDisc(Math.round(cpr / 4));
+    setStatus('connected', `Connected · …${serialTail(info.serial)}`);
+    showInfo();
   }
 
   function showInfo() {
@@ -447,7 +478,7 @@
       const radio = el.querySelector('input');
       const b = el.querySelector('b');
       b.querySelector('em')?.remove();
-      if (radio.value === mode) b.insertAdjacentHTML('beforeend', '<em>현재</em>');
+      if (radio.value === mode) b.insertAdjacentHTML('beforeend', '<em>current</em>');
     }
     if (mode && !document.querySelector('input[name=mode]:checked')) {
       document.querySelector(`input[name=mode][value="${mode}"]`).checked = true;
@@ -477,31 +508,35 @@
     return i.usbVendorId === VID && PIDS.includes(i.usbProductId);
   }
 
-  async function connectTo(p) {
-    if (port) return;
+  // quiet: skip the error notice, for ports another tab may already hold.
+  // auto:  picked up while waiting for a restart, so handleInfo checks
+  //        that it is the same controller.
+  async function connectTo(p, { quiet = false, auto = false } = {}) {
+    if (port) return false;
     try {
       await p.open({ baudRate: 115200 });
     } catch (e) {
-      notify(`포트를 열 수 없어요: ${e.message}. 다른 프로그램이 포트를 쓰고 있는지 확인하세요.`, true);
-      return;
+      if (!quiet) notify(`Could not open the port: ${e.message}. Another tab or app may be using it.`, true);
+      return false;
     }
 
     port = p;
+    autoConnected = auto;
     clearTimeout(reconnectTimer);
     try { await p.setSignals({ dataTerminalReady: true, requestToSend: true }); } catch (_) {}
     writer = p.writable.getWriter();
 
-    const reconnected = rebooting === 'mode';
     rebooting = null;
     info = null;
     input = null;
-    setStatus('connected', '연결됨');
-    log('연결됨', 'sys');
-    notify(reconnected ? '재시작이 끝났어요. 새 모드로 연결됐어요.' : '');
+    setStatus('connected', 'Connected');
+    log('connected', 'sys');
+    if (!expectSerial) notify('');
 
     readLoop(p);
     await send('info');
     await send('stream on');
+    return true;
   }
 
   async function readLoop(p) {
@@ -521,7 +556,7 @@
         }
       }
     } catch (_) {
-      // Device unplugged or rebooted.
+      // Device unplugged or restarted.
     } finally {
       reader.releaseLock();
       reader = null;
@@ -537,28 +572,31 @@
     writer = null;
     try { await p.close(); } catch (_) {}
 
+    info = null;
     input = null;
     dirty = true;
-    log('연결 끊김', 'sys');
+    showInfo();
+    log('disconnected', 'sys');
 
     if (rebooting === 'mode') {
-      setStatus('busy', '재시작 중…');
+      setStatus('busy', 'Restarting…');
       reconnectTimer = setTimeout(() => {
-        setStatus('off', '연결 안 됨');
-        notify('새 모드로는 처음 연결하는 거라 브라우저 허락이 한 번 더 필요해요. 연결 버튼을 눌러 BitCon을 다시 선택하세요. (모드마다 처음 한 번만)', true);
+        setStatus('off', 'Not connected');
+        notify('The browser needs permission once for each mode on each controller. Press Connect and select BitCon again.', true);
       }, RECONNECT_HINT_MS);
     } else if (rebooting === 'bootsel') {
       rebooting = null;
-      setStatus('off', '업데이트 모드');
-      notify('업데이트 모드로 재시작했어요. RP2350 드라이브에 bitcon.uf2를 복사하면 새 펌웨어로 다시 켜져요.');
+      setStatus('off', 'Bootloader');
+      notify('The controller restarted into update mode. Copy bitcon.uf2 to the RP2350 drive and it will restart with the new firmware.');
     } else {
-      setStatus('off', '연결 안 됨');
+      setStatus('off', 'Not connected');
     }
     updateApply();
   }
 
   async function disconnect() {
     rebooting = null;
+    expectSerial = null;
     clearTimeout(reconnectTimer);
     if (reader) await reader.cancel().catch(() => {});
     else await teardown();
@@ -571,7 +609,7 @@
       const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: VID }] });
       await connectTo(p);
     } catch (e) {
-      if (e.name !== 'NotFoundError') notify(`연결 실패: ${e.message}`, true);
+      if (e.name !== 'NotFoundError') notify(`Connection failed: ${e.message}`, true);
     }
   });
 
@@ -584,8 +622,10 @@
     if (sel) send(`mode ${sel}`);
   });
 
+  $('identify').addEventListener('click', () => send('identify'));
+
   $('bootsel').addEventListener('click', () => {
-    if (confirm('컨트롤러를 펌웨어 업데이트 모드(BOOTSEL)로 재시작할까요?\n업데이트가 끝날 때까지 컨트롤러 입력이 멈춰요.')) {
+    if (confirm('Restart the controller into firmware update mode (BOOTSEL)?\nIt stops sending input until new firmware is copied.')) {
       send('bootsel');
     }
   });
@@ -615,9 +655,10 @@
       dirty = false;
       const s = input;
       for (let i = 0; i < keys.length; i++) {
-        keys[i].classList.toggle('on', !!s && ((s.keys >> i) & 1) === 1);
+        const on = !!s && ((s.keys >> i) & 1) === 1;
+        keys[i].classList.toggle('on', on);
         keys[i].classList.toggle('raw-on', !!s && ((s.raw >> i) & 1) === 1);
-        keys[i].setAttribute('aria-label', `버튼 ${i + 1}${s && (s.keys >> i) & 1 ? ' 눌림' : ''}`);
+        keys[i].setAttribute('aria-label', `Button ${i + 1}${on ? ' pressed' : ''}`);
       }
 
       const cpr = parseInt(info?.cpr, 10) || 192;
@@ -627,10 +668,10 @@
         $('tt-pos').textContent = String(s.tt);
         const cw = ((s.keys >> 9) & 1) === 1;
         const ccw = ((s.keys >> 10) & 1) === 1;
-        setStat('cw', cw ? '입력' : '—', { lit: cw });
-        setStat('ccw', ccw ? '입력' : '—', { lit: ccw });
-        setStat('sen-a', (s.sen & 1) ? 'HIGH · 가림' : 'LOW · 빛');
-        setStat('sen-b', (s.sen & 2) ? 'HIGH · 가림' : 'LOW · 빛');
+        setStat('cw', cw ? 'active' : '—', { lit: cw });
+        setStat('ccw', ccw ? 'active' : '—', { lit: ccw });
+        setStat('sen-a', (s.sen & 1) ? 'HIGH · blocked' : 'LOW · lit');
+        setStat('sen-b', (s.sen & 2) ? 'HIGH · blocked' : 'LOW · lit');
         setStat('turns', (s.tt / cpr).toFixed(2));
         setStat('errors', String(s.err), { alert: s.err > 0 });
       } else {
@@ -640,7 +681,7 @@
       }
     }
 
-    $('rate').textContent = port ? `갱신 ${frameTimes.length} Hz` : '연결되면 실시간으로 표시돼요';
+    $('rate').textContent = port ? `${frameTimes.length} Hz` : 'Live once connected';
     requestAnimationFrame(render);
   }
   requestAnimationFrame(render);
@@ -649,22 +690,28 @@
 
   if (!('serial' in navigator)) {
     $('connect').disabled = true;
-    notify('이 브라우저는 Web Serial을 지원하지 않아요. Chrome 또는 Edge(데스크톱)에서 열어 주세요.', true);
-    setStatus('off', '사용 불가');
+    notify('This browser does not support Web Serial. Open this page in desktop Chrome or Edge.', true);
+    setStatus('off', 'Unsupported');
     return;
   }
 
-  setStatus('off', '연결 안 됨');
+  setStatus('off', 'Not connected');
 
-  // Ports the user has already allowed reconnect without a prompt, both on
-  // page load and when the controller comes back after a mode change.
+  // Auto-connect only while waiting for our own controller to restart.
+  // Otherwise a second controller being plugged in, or a port another tab
+  // is waiting for, would be grabbed here.
   navigator.serial.addEventListener('connect', (e) => {
-    if (!port && isBitcon(e.target)) connectTo(e.target);
+    if (!port && rebooting === 'mode' && isBitcon(e.target)) {
+      connectTo(e.target, { quiet: true, auto: true });
+    }
   });
 
-  navigator.serial.getPorts().then((ports) => {
-    const p = ports.find(isBitcon);
-    if (p && !port) connectTo(p);
+  // On load, take the first already-allowed controller that is free. Ports
+  // held by another tab fail to open and are skipped.
+  navigator.serial.getPorts().then(async (ports) => {
+    for (const p of ports.filter(isBitcon)) {
+      if (port || await connectTo(p, { quiet: true })) break;
+    }
   });
 })();
 </script>

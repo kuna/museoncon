@@ -57,6 +57,12 @@ static volatile uint32_t g_sen_state = 0;
 /* Quadrature transitions dropped as invalid since boot. Written by core1. */
 static volatile uint32_t g_tt_errors = 0;
 
+/* Bumped by core0 to make core1 blink every LED for IDENTIFY_US, so the
+ * configurator can show which controller it is talking to. */
+static volatile uint32_t g_identify_req = 0;
+
+#define IDENTIFY_US 2000000
+
 /* =============================================================
  *  Quadrature decode table
  * ============================================================= */
@@ -162,6 +168,9 @@ static void core1_main(void)
     uint64_t tt_hold[2] = { 0, 0 };   /* [0] = CW, [1] = CCW             */
     uint32_t tt_errors = 0;           /* invalid transitions             */
 
+    uint32_t identify_seen  = g_identify_req;
+    uint64_t identify_until = 0;
+
     uint8_t q_prev = (uint8_t)((gpio_get_all() >> PIN_SEN_BASE) & 0x3u);
 
     while (true) {
@@ -186,6 +195,15 @@ static void core1_main(void)
                 keys    |= (1u << i);
                 led_val |= (1u << LED_PINS[i]);
             }
+        }
+
+        /* Identify overrides button lighting: every LED blinks at ~4 Hz. */
+        if (g_identify_req != identify_seen) {
+            identify_seen  = g_identify_req;
+            identify_until = now_us + IDENTIFY_US;
+        }
+        if (identify_until > now_us) {
+            led_val = ((now_us >> 17) & 1u) ? g_led_mask : 0u;
         }
 
         /* One write for all nine LEDs; other GPIOs are left alone. */
@@ -338,6 +356,7 @@ static void gamepad_task(uint8_t instance)
  *                     ok mode <m> reboot   stored; reboots to re-enumerate
  *   stream on|off  -> ok stream on|off
  *   state          -> state ...            one snapshot
+ *   identify       -> ok identify          blinks every LED for 2 s
  *   bootsel        -> ok bootsel           reboots into the UF2 bootloader
  *   anything else  -> err <reason>
  *
@@ -464,6 +483,9 @@ static void handle_command(char *line)
         const input_snapshot_t s = input_snapshot();
         format_state(buf, sizeof(buf), &s);
         port_printf("%s", buf);
+    } else if (strcmp(cmd, "identify") == 0) {
+        g_identify_req++;
+        port_printf("ok identify\n");
     } else if (strcmp(cmd, "bootsel") == 0) {
         port_printf("ok bootsel\n");
         schedule_reboot(REBOOT_BOOTSEL, 0);

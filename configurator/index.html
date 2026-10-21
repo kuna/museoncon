@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BitCon Configurator</title>
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --card: #ffffff;
+    --line: #e1e4ea;
+    --text: #1b1f27;
+    --muted: #677084;
+    --accent: #3b5bdb;
+    --accent-soft: #e3e9ff;
+    --accent-text: #ffffff;
+    --raw: #e8a33d;
+    --ok: #2f9e6e;
+    --warn: #c2410c;
+    --key-idle: #eef0f4;
+    --key-edge: #d3d8e1;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12141a;
+      --card: #1b1e26;
+      --line: #2b303b;
+      --text: #e8eaf0;
+      --muted: #9098aa;
+      --accent: #6c8cff;
+      --accent-soft: #263257;
+      --accent-text: #0d1122;
+      --raw: #f0b45a;
+      --ok: #4cc290;
+      --warn: #fb8b5b;
+      --key-idle: #252935;
+      --key-edge: #343a48;
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+
+  header {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    max-width: 1120px; margin: 0 auto; padding: 24px 16px 8px;
+  }
+  header h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .head-text { flex: 1 1 240px; }
+  .conn { display: flex; align-items: center; gap: 10px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line);
+    font-size: 13px; color: var(--muted); white-space: nowrap;
+  }
+  .pill::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .pill[data-state="connected"] { color: var(--ok); }
+  .pill[data-state="connected"]::before { background: var(--ok); }
+  .pill[data-state="busy"] { color: var(--raw); }
+  .pill[data-state="busy"]::before { background: var(--raw); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+
+  .btn {
+    border: 1px solid var(--line); background: var(--card);
+    padding: 8px 16px; border-radius: 9px; cursor: pointer;
+    font-weight: 600; font-size: 14px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  .notice {
+    max-width: 1120px; margin: 8px auto 0; padding: 0 16px;
+  }
+  .notice > div {
+    padding: 10px 14px; border-radius: 10px; font-size: 14px;
+    background: var(--accent-soft); border: 1px solid var(--line);
+  }
+  .notice > div.warn { background: transparent; border-color: var(--warn); color: var(--warn); }
+
+  main {
+    display: grid; gap: 16px;
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    max-width: 1120px; margin: 0 auto; padding: 16px;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .col { display: grid; gap: 16px; align-content: start; min-width: 0; }
+
+  section.card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px 18px 20px; min-width: 0;
+  }
+  .card h2 {
+    margin: 0 0 14px; font-size: 15px; font-weight: 700;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .card h2 small { font-weight: 400; color: var(--muted); font-size: 13px; }
+  .disabled-when-off { transition: opacity 0.2s; }
+  body:not(.online) .disabled-when-off { opacity: 0.45; pointer-events: none; }
+
+  /* ---- buttons ---- */
+  .pad {
+    display: grid; grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 10px; margin-bottom: 8px;
+  }
+  .key {
+    position: relative; grid-column-end: span 2; aspect-ratio: 5 / 4;
+    border-radius: 12px; background: var(--key-idle);
+    border: 2px solid var(--key-edge);
+    display: grid; place-items: center;
+    font-size: 20px; font-weight: 700; color: var(--muted);
+    transition: background 60ms, border-color 60ms, transform 60ms;
+  }
+  .key.on {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-text);
+    transform: translateY(2px);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  .key .raw {
+    position: absolute; top: 7px; right: 7px; width: 8px; height: 8px;
+    border-radius: 50%; background: transparent; border: 1.5px solid var(--key-edge);
+  }
+  .key.raw-on .raw { background: var(--raw); border-color: var(--raw); }
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+  /* ---- turntable ---- */
+  .tt { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; align-items: center; margin-top: 22px; }
+  @media (max-width: 520px) { .tt { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+  .tt svg { width: 200px; height: 200px; display: block; }
+  .tt .disc { fill: var(--key-idle); stroke: var(--key-edge); stroke-width: 2; }
+  .tt .slot { fill: var(--key-edge); }
+  .tt .marker { fill: var(--accent); }
+  .tt .hub { fill: var(--card); stroke: var(--key-edge); stroke-width: 2; }
+  .tt .pos { font: 700 18px var(--mono); fill: var(--text); text-anchor: middle; }
+  .tt .pos-label { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
+  .stat {
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+  }
+  .stat .label { font-size: 12px; color: var(--muted); }
+  .stat .value { font: 600 16px var(--mono); }
+  .stat.lit { border-color: var(--accent); background: var(--accent-soft); }
+  .stat.alert .value { color: var(--warn); }
+
+  /* ---- device / mode ---- */
+  dl.info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0 0 14px; font-size: 14px; }
+  dl.info dt { color: var(--muted); }
+  dl.info dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+
+  .modes { display: grid; gap: 8px; margin-bottom: 14px; }
+  .mode {
+    display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px;
+    border: 1.5px solid var(--line); border-radius: 11px; padding: 10px 12px; cursor: pointer;
+  }
+  .mode:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  .mode input { grid-row: span 2; margin: 3px 0 0; accent-color: var(--accent); }
+  .mode b { font-size: 14px; }
+  .mode b em {
+    font-style: normal; font-size: 11px; font-weight: 600; color: var(--ok);
+    border: 1px solid currentColor; border-radius: 6px; padding: 0 5px; margin-left: 6px;
+  }
+  .mode span { font-size: 12.5px; color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; }
+
+  /* ---- log ---- */
+  .log {
+    height: 220px; overflow: auto; margin: 0 0 10px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 10px; font: 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .log .tx { color: var(--accent); }
+  .log .err { color: var(--warn); }
+  .log .sys { color: var(--muted); font-style: italic; }
+  .send { display: flex; gap: 8px; }
+  .send input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--bg); font-family: var(--mono); font-size: 13px;
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .check { font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-text">
+    <h1>BitCon Configurator</h1>
+    <p>Change the output mode and watch live input. Plug in the controller, then press Connect.</p>
+  </div>
+  <div class="conn">
+    <span class="pill" id="status" data-state="off" aria-live="polite">Not connected</span>
+    <button class="btn primary" id="connect">Connect</button>
+  </div>
+</header>
+
+<div class="notice" id="notice" hidden><div></div></div>
+
+<main>
+  <div class="col">
+    <section class="card disabled-when-off">
+      <h2>Input <small id="rate">—</small></h2>
+      <div class="pad" id="pad"></div>
+      <div class="legend">
+        <span><i style="background: var(--accent)"></i>Pressed (debounced)</span>
+        <span><i style="background: var(--raw); border-radius: 50%"></i>Pin signal (raw)</span>
+      </div>
+
+      <div class="tt">
+        <svg viewBox="-100 -100 200 200" aria-label="Turntable">
+          <circle class="disc" r="94"/>
+          <g id="disc"></g>
+          <circle class="hub" r="46"/>
+          <text class="pos" id="tt-pos" y="6">0</text>
+          <text class="pos-label" y="24">position</text>
+        </svg>
+        <div class="stats">
+          <div class="stat" id="cw"><div class="label">Clockwise (CW)</div><div class="value">—</div></div>
+          <div class="stat" id="ccw"><div class="label">Counter-clockwise (CCW)</div><div class="value">—</div></div>
+          <div class="stat" id="sen-a"><div class="label">SEN1 (A)</div><div class="value">—</div></div>
+          <div class="stat" id="sen-b"><div class="label">SEN2 (B)</div><div class="value">—</div></div>
+          <div class="stat" id="turns"><div class="label">Turns</div><div class="value">—</div></div>
+          <div class="stat" id="errors" title="Times both sensor signals changed at once. If this keeps rising, check sensor alignment and wiring.">
+            <div class="label">Invalid steps</div><div class="value">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2 style="margin: 0">Serial log</h2>
+        <label class="check"><input type="checkbox" id="show-state"> Show state lines</label>
+      </div>
+      <div class="log" id="log" aria-live="off"></div>
+      <form class="send" id="send">
+        <input id="cmd" placeholder="Command (e.g. info, mode, state)" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit">Send</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card disabled-when-off">
+      <h2>Device</h2>
+      <dl class="info">
+        <dt>Mode</dt><dd id="i-mode">—</dd>
+        <dt>Firmware</dt><dd id="i-fw">—</dd>
+        <dt>Default mode</dt><dd id="i-default">—</dd>
+        <dt>Buttons</dt><dd id="i-buttons">—</dd>
+        <dt>Serial</dt><dd id="i-serial">—</dd>
+      </dl>
+      <button class="btn" id="identify">Blink LEDs</button>
+      <p class="hint">Blinks this controller's LEDs for 2 seconds, so you can tell which one this tab is connected to.</p>
+      <p class="hint">Several controllers? Press Disconnect, then Connect and pick another port. Each tab holds one controller, so you can also open one tab per controller.</p>
+    </section>
+
+    <section class="card disabled-when-off">
+      <h2>Output mode</h2>
+      <div class="modes" id="modes">
+        <label class="mode">
+          <input type="radio" name="mode" value="gamepad">
+          <b>GAMEPAD</b>
+          <span>Gamepad buttons 1–9, turntable on the X axis</span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="keyboard">
+          <b>KEYBOARD</b>
+          <span>A S D F Space J K L ; · turntable on Q / W</span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="composite">
+          <b>COMPOSITE</b>
+          <span>Keyboard and gamepad at the same time</span>
+        </label>
+      </div>
+      <button class="btn primary" id="apply" disabled>Apply mode</button>
+      <p class="hint">The controller restarts to apply the change. The mode is stored on the controller, so it survives unplugging and firmware updates.</p>
+    </section>
+
+    <section class="card disabled-when-off">
+      <h2>Firmware update</h2>
+      <button class="btn" id="bootsel">Restart into BOOTSEL</button>
+      <p class="hint">Enters update mode without opening the case. When the <b>RP2350</b> drive appears, copy <code>bitcon.uf2</code> onto it.</p>
+    </section>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const VID = 0xCAFE;
+  const PIDS = [0xB170, 0xB171, 0xB172];
+  const MODE_LABEL = { keyboard: 'KEYBOARD', gamepad: 'GAMEPAD', composite: 'COMPOSITE' };
+  const RECONNECT_HINT_MS = 6000;
+  const LOG_LIMIT = 400;
+
+  const $ = (id) => document.getElementById(id);
+  const encoder = new TextEncoder();
+
+  let port = null;
+  let reader = null;
+  let writer = null;
+  let rebooting = null;      // null | 'mode' | 'bootsel'
+  let expectSerial = null;   // controller we are waiting on after a mode change
+  let autoConnected = false; // current port was picked up while waiting
+  let reconnectTimer = null;
+  let info = null;
+  let input = null;
+  let frameTimes = [];
+  let dirty = true;
+
+  /* ---------- page skeleton ---------- */
+
+  // Top row 1 3 5 7 9, bottom row 2 4 6 8, staggered like the top plate.
+  const keys = [];
+  for (let i = 0; i < 9; i++) {
+    const el = document.createElement('div');
+    el.className = 'key';
+    el.style.gridRow = (i % 2 === 0) ? '1' : '2';
+    el.style.gridColumnStart = String(i + 1);
+    el.innerHTML = `<span class="raw"></span>${i + 1}`;
+    $('pad').appendChild(el);
+    keys.push(el);
+  }
+
+  function drawDisc(slots) {
+    const g = $('disc');
+    g.innerHTML = '';
+    for (let i = 0; i < slots; i++) {
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('class', 'slot');
+      r.setAttribute('x', '-2.2'); r.setAttribute('y', '-88');
+      r.setAttribute('width', '4.4'); r.setAttribute('height', '18');
+      r.setAttribute('rx', '1');
+      r.setAttribute('transform', `rotate(${(360 / slots) * i})`);
+      g.appendChild(r);
+    }
+    const m = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    m.setAttribute('class', 'marker');
+    m.setAttribute('cy', '-58'); m.setAttribute('r', '6');
+    g.appendChild(m);
+  }
+  drawDisc(48);
+
+  /* ---------- status, notices, log ---------- */
+
+  function setStatus(state, text) {
+    $('status').dataset.state = state;
+    $('status').textContent = text;
+    document.body.classList.toggle('online', state === 'connected');
+    $('connect').textContent = port ? 'Disconnect' : 'Connect';
+  }
+
+  function notify(text, warn = false) {
+    const box = $('notice');
+    box.hidden = !text;
+    box.firstElementChild.textContent = text || '';
+    box.firstElementChild.className = warn ? 'warn' : '';
+  }
+
+  function log(text, cls = '') {
+    const box = $('log');
+    const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 4;
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = text;
+    box.appendChild(line);
+    while (box.childElementCount > LOG_LIMIT) box.firstElementChild.remove();
+    if (atBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  const serialTail = (serial) => (serial ? serial.slice(-4) : '?');
+
+  /* ---------- protocol ---------- */
+
+  function fields(line) {
+    const out = {};
+    for (const tok of line.split(' ').slice(1)) {
+      const i = tok.indexOf('=');
+      if (i > 0) out[tok.slice(0, i)] = tok.slice(i + 1);
+    }
+    return out;
+  }
+
+  function handleLine(line) {
+    const kind = line.split(' ', 1)[0];
+
+    if (kind === 'state') {
+      if ($('show-state').checked) log(line);
+      const f = fields(line);
+      input = {
+        keys: parseInt(f.keys, 16) || 0,
+        raw: parseInt(f.raw, 16) || 0,
+        sen: parseInt(f.sen, 10) || 0,
+        tt: parseInt(f.tt, 10) || 0,
+        err: parseInt(f.err, 10) || 0,
+      };
+      frameTimes.push(performance.now());
+      dirty = true;
+      return;
+    }
+
+    log(line, kind === 'err' ? 'err' : '');
+
+    if (kind === 'info') {
+      handleInfo(fields(line));
+    } else if (kind === 'mode') {
+      if (info) { info.mode = line.split(' ')[1]; showInfo(); }
+    } else if (line.startsWith('ok mode ') && line.endsWith(' reboot')) {
+      rebooting = 'mode';
+      expectSerial = info?.serial || null;
+      setStatus('busy', 'Restarting…');
+      notify('Mode saved. The controller is restarting and will reconnect automatically.');
+    } else if (line === 'ok bootsel') {
+      rebooting = 'bootsel';
+      expectSerial = null;
+      setStatus('busy', 'Entering bootloader…');
+    } else if (kind === 'err') {
+      notify(`Controller replied: ${line}`, true);
+    }
+  }
+
+  function handleInfo(next) {
+    if (expectSerial) {
+      if (next.serial === expectSerial) {
+        expectSerial = null;
+        notify('Restart finished. Connected in the new mode.');
+      } else if (autoConnected) {
+        // Another controller showed up while ours was restarting. Let it go
+        // and keep waiting, so the page never silently swaps controllers.
+        log(`released controller …${serialTail(next.serial)}`, 'sys');
+        rebooting = 'mode';
+        reader?.cancel().catch(() => {});
+        notify(`Another controller (serial …${serialTail(next.serial)}) connected first, so it was released. Still waiting for …${serialTail(expectSerial)}.`, true);
+        return;
+      } else {
+        expectSerial = null;  // the user picked a different controller on purpose
+      }
+    }
+
+    info = next;
+    const cpr = parseInt(info.cpr, 10);
+    if (cpr >= 4) drawDisc(Math.round(cpr / 4));
+    setStatus('connected', `Connected · …${serialTail(info.serial)}`);
+    showInfo();
+  }
+
+  function showInfo() {
+    const mode = info?.mode;
+    $('i-mode').textContent = MODE_LABEL[mode] || mode || '—';
+    $('i-fw').textContent = info?.fw || '—';
+    $('i-default').textContent = MODE_LABEL[info?.default] || '—';
+    $('i-buttons').textContent = info?.buttons || '—';
+    $('i-serial').textContent = info?.serial || '—';
+
+    for (const el of document.querySelectorAll('.mode')) {
+      const radio = el.querySelector('input');
+      const b = el.querySelector('b');
+      b.querySelector('em')?.remove();
+      if (radio.value === mode) b.insertAdjacentHTML('beforeend', '<em>current</em>');
+    }
+    if (mode && !document.querySelector('input[name=mode]:checked')) {
+      document.querySelector(`input[name=mode][value="${mode}"]`).checked = true;
+    }
+    updateApply();
+  }
+
+  function updateApply() {
+    const sel = document.querySelector('input[name=mode]:checked')?.value;
+    $('apply').disabled = !port || !info || !sel || sel === info.mode;
+  }
+
+  async function send(cmd) {
+    if (!writer) return;
+    log(`> ${cmd}`, 'tx');
+    try {
+      await writer.write(encoder.encode(cmd + '\n'));
+    } catch (_) {
+      // The read loop notices the lost device and tears down.
+    }
+  }
+
+  /* ---------- connection ---------- */
+
+  function isBitcon(p) {
+    const i = p.getInfo();
+    return i.usbVendorId === VID && PIDS.includes(i.usbProductId);
+  }
+
+  // quiet: skip the error notice, for ports another tab may already hold.
+  // auto:  picked up while waiting for a restart, so handleInfo checks
+  //        that it is the same controller.
+  async function connectTo(p, { quiet = false, auto = false } = {}) {
+    if (port) return false;
+    try {
+      await p.open({ baudRate: 115200 });
+    } catch (e) {
+      if (!quiet) notify(`Could not open the port: ${e.message}. Another tab or app may be using it.`, true);
+      return false;
+    }
+
+    port = p;
+    autoConnected = auto;
+    clearTimeout(reconnectTimer);
+    try { await p.setSignals({ dataTerminalReady: true, requestToSend: true }); } catch (_) {}
+    writer = p.writable.getWriter();
+
+    rebooting = null;
+    info = null;
+    input = null;
+    setStatus('connected', 'Connected');
+    log('connected', 'sys');
+    if (!expectSerial) notify('');
+
+    readLoop(p);
+    await send('info');
+    await send('stream on');
+    return true;
+  }
+
+  async function readLoop(p) {
+    const decoder = new TextDecoder();
+    let buf = '';
+    reader = p.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).replace(/\r$/, '');
+          buf = buf.slice(nl + 1);
+          if (line) handleLine(line);
+        }
+      }
+    } catch (_) {
+      // Device unplugged or restarted.
+    } finally {
+      reader.releaseLock();
+      reader = null;
+    }
+    await teardown();
+  }
+
+  async function teardown() {
+    const p = port;
+    if (!p) return;
+    port = null;
+    try { writer?.releaseLock(); } catch (_) {}
+    writer = null;
+    try { await p.close(); } catch (_) {}
+
+    info = null;
+    input = null;
+    dirty = true;
+    showInfo();
+    log('disconnected', 'sys');
+
+    if (rebooting === 'mode') {
+      setStatus('busy', 'Restarting…');
+      reconnectTimer = setTimeout(() => {
+        setStatus('off', 'Not connected');
+        notify('The browser needs permission once for each mode on each controller. Press Connect and select BitCon again.', true);
+      }, RECONNECT_HINT_MS);
+    } else if (rebooting === 'bootsel') {
+      rebooting = null;
+      setStatus('off', 'Bootloader');
+      notify('The controller restarted into update mode. Copy bitcon.uf2 to the RP2350 drive and it will restart with the new firmware.');
+    } else {
+      setStatus('off', 'Not connected');
+    }
+    updateApply();
+  }
+
+  async function disconnect() {
+    rebooting = null;
+    expectSerial = null;
+    clearTimeout(reconnectTimer);
+    if (reader) await reader.cancel().catch(() => {});
+    else await teardown();
+    notify('');
+  }
+
+  $('connect').addEventListener('click', async () => {
+    if (port) return disconnect();
+    try {
+      const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: VID }] });
+      await connectTo(p);
+    } catch (e) {
+      if (e.name !== 'NotFoundError') notify(`Connection failed: ${e.message}`, true);
+    }
+  });
+
+  /* ---------- controls ---------- */
+
+  $('modes').addEventListener('change', updateApply);
+
+  $('apply').addEventListener('click', () => {
+    const sel = document.querySelector('input[name=mode]:checked')?.value;
+    if (sel) send(`mode ${sel}`);
+  });
+
+  $('identify').addEventListener('click', () => send('identify'));
+
+  $('bootsel').addEventListener('click', () => {
+    if (confirm('Restart the controller into firmware update mode (BOOTSEL)?\nIt stops sending input until new firmware is copied.')) {
+      send('bootsel');
+    }
+  });
+
+  $('send').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const cmd = $('cmd').value.trim();
+    if (!cmd) return;
+    send(cmd);
+    $('cmd').value = '';
+  });
+
+  /* ---------- rendering ---------- */
+
+  function setStat(id, text, { lit = false, alert = false } = {}) {
+    const el = $(id);
+    el.querySelector('.value').textContent = text;
+    el.classList.toggle('lit', lit);
+    el.classList.toggle('alert', alert);
+  }
+
+  function render() {
+    const now = performance.now();
+    frameTimes = frameTimes.filter((t) => now - t < 1000);
+
+    if (dirty) {
+      dirty = false;
+      const s = input;
+      for (let i = 0; i < keys.length; i++) {
+        const on = !!s && ((s.keys >> i) & 1) === 1;
+        keys[i].classList.toggle('on', on);
+        keys[i].classList.toggle('raw-on', !!s && ((s.raw >> i) & 1) === 1);
+        keys[i].setAttribute('aria-label', `Button ${i + 1}${on ? ' pressed' : ''}`);
+      }
+
+      const cpr = parseInt(info?.cpr, 10) || 192;
+      if (s) {
+        const angle = ((s.tt % cpr) + cpr) % cpr / cpr * 360;
+        $('disc').setAttribute('transform', `rotate(${angle})`);
+        $('tt-pos').textContent = String(s.tt);
+        const cw = ((s.keys >> 9) & 1) === 1;
+        const ccw = ((s.keys >> 10) & 1) === 1;
+        setStat('cw', cw ? 'active' : '—', { lit: cw });
+        setStat('ccw', ccw ? 'active' : '—', { lit: ccw });
+        setStat('sen-a', (s.sen & 1) ? 'HIGH · blocked' : 'LOW · lit');
+        setStat('sen-b', (s.sen & 2) ? 'HIGH · blocked' : 'LOW · lit');
+        setStat('turns', (s.tt / cpr).toFixed(2));
+        setStat('errors', String(s.err), { alert: s.err > 0 });
+      } else {
+        $('disc').removeAttribute('transform');
+        $('tt-pos').textContent = '—';
+        for (const id of ['cw', 'ccw', 'sen-a', 'sen-b', 'turns', 'errors']) setStat(id, '—');
+      }
+    }
+
+    $('rate').textContent = port ? `${frameTimes.length} Hz` : 'Live once connected';
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+
+  /* ---------- start ---------- */
+
+  if (!('serial' in navigator)) {
+    $('connect').disabled = true;
+    notify('This browser does not support Web Serial. Open this page in desktop Chrome or Edge.', true);
+    setStatus('off', 'Unsupported');
+    return;
+  }
+
+  setStatus('off', 'Not connected');
+
+  // Auto-connect only while waiting for our own controller to restart.
+  // Otherwise a second controller being plugged in, or a port another tab
+  // is waiting for, would be grabbed here.
+  navigator.serial.addEventListener('connect', (e) => {
+    if (!port && rebooting === 'mode' && isBitcon(e.target)) {
+      connectTo(e.target, { quiet: true, auto: true });
+    }
+  });
+
+  // On load, take the first already-allowed controller that is free. Ports
+  // held by another tab fail to open and are skipped.
+  navigator.serial.getPorts().then(async (ports) => {
+    for (const p of ports.filter(isBitcon)) {
+      if (port || await connectTo(p, { quiet: true })) break;
+    }
+  });
+})();
+</script>
+</body>
+</html>

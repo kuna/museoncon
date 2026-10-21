@@ -1,8 +1,11 @@
 # Build the firmware into build/bitcon.uf2.
 #
-#   make build                 # output mode from config.h
-#   make build MODE=GAMEPAD    # KEYBOARD | GAMEPAD | COMPOSITE
+#   make build                 # default output mode from config.h
+#   make build MODE=KEYBOARD   # KEYBOARD | GAMEPAD | COMPOSITE
 #   make clean
+#
+# MODE only sets the mode a board boots in before the configurator page
+# has stored one. A stored mode wins, and survives reflashing.
 #
 # Requires PICO_SDK_PATH to point at a pico-sdk 2.x checkout.
 

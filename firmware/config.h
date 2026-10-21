@@ -2,8 +2,7 @@
  * config.h - BitCon hardware map and tuning parameters.
  *
  * This is the only file you should need to edit. It deliberately has no
- * TinyUSB dependency so that tusb_config.h can include it to size the
- * HID instance count.
+ * TinyUSB or pico-sdk dependency, so any source file can include it.
  *
  * The pin assignments match the schematic 1:1.
  */
@@ -21,10 +20,17 @@
 #define OUT_GAMEPAD    2  /* Gamepad only                              */
 #define OUT_COMPOSITE  3  /* Both, as two independent HID interfaces   */
 
-/* Override from the build system with -DOUTPUT_MODE=OUT_GAMEPAD if you
- * prefer not to edit this file, e.g. to build all three variants in CI. */
-#ifndef OUTPUT_MODE
-#define OUTPUT_MODE    OUT_COMPOSITE
+/*
+ * The output mode is a runtime setting: the configurator page changes it
+ * over the serial port and it is kept in flash across reconnects and
+ * firmware updates. This is only the mode a board boots in before anything
+ * has been stored.
+ *
+ * Override from the build system with -DDEFAULT_OUTPUT_MODE=OUT_KEYBOARD if
+ * you prefer not to edit this file.
+ */
+#ifndef DEFAULT_OUTPUT_MODE
+#define DEFAULT_OUTPUT_MODE  OUT_GAMEPAD
 #endif
 
 /*
@@ -199,28 +205,13 @@
  *  Derived - do not edit below this line
  * ============================================================= */
 
-#if OUTPUT_MODE == OUT_COMPOSITE
-  #define BITCON_HAS_KEYBOARD 1
-  #define BITCON_HAS_GAMEPAD  1
-  #define ITF_KEYBOARD        0
-  #define ITF_GAMEPAD         1
-  #define HID_INSTANCE_COUNT  2
-#elif OUTPUT_MODE == OUT_KEYBOARD
-  #define BITCON_HAS_KEYBOARD 1
-  #define BITCON_HAS_GAMEPAD  0
-  #define ITF_KEYBOARD        0
-  #define HID_INSTANCE_COUNT  1
-#elif OUTPUT_MODE == OUT_GAMEPAD
-  #define BITCON_HAS_KEYBOARD 0
-  #define BITCON_HAS_GAMEPAD  1
-  #define ITF_GAMEPAD         0
-  #define HID_INSTANCE_COUNT  1
-#else
-  #error "OUTPUT_MODE must be OUT_KEYBOARD, OUT_GAMEPAD or OUT_COMPOSITE"
+#if (DEFAULT_OUTPUT_MODE != OUT_KEYBOARD) && \
+    (DEFAULT_OUTPUT_MODE != OUT_GAMEPAD) && \
+    (DEFAULT_OUTPUT_MODE != OUT_COMPOSITE)
+  #error "DEFAULT_OUTPUT_MODE must be OUT_KEYBOARD, OUT_GAMEPAD or OUT_COMPOSITE"
 #endif
 
-#if BITCON_HAS_GAMEPAD && \
-    (TT_GAMEPAD_STYLE != TT_AXIS) && (TT_GAMEPAD_STYLE != TT_DIGITAL)
+#if (TT_GAMEPAD_STYLE != TT_AXIS) && (TT_GAMEPAD_STYLE != TT_DIGITAL)
   #error "TT_GAMEPAD_STYLE must be TT_AXIS or TT_DIGITAL"
 #endif
 

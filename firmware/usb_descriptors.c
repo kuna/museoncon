@@ -1,9 +1,10 @@
 /*
- * usb_descriptors.c - HID descriptors for BitCon.
+ * usb_descriptors.c - USB descriptors for BitCon.
  *
- * Builds a keyboard interface, a gamepad interface, or both, according to
- * OUTPUT_MODE in config.h. Both run at bInterval = 1, i.e. 1 ms polling,
- * which is the ceiling for USB Full Speed.
+ * Every mode exposes a keyboard interface, a gamepad interface, or both,
+ * followed by a CDC serial port for the configurator. The layout is picked
+ * at boot from the stored output mode. HID runs at bInterval = 1, i.e. 1 ms
+ * polling, which is the ceiling for USB Full Speed.
  */
 
 #include <string.h>
@@ -12,6 +13,8 @@
 #include "pico/unique_id.h"
 
 #include "config.h"
+#include "settings.h"
+#include "usb_descriptors.h"
 
 /* =============================================================
  *  Device descriptor
@@ -22,33 +25,38 @@
 /*
  * Each output mode gets its own PID.
  *
- * Windows caches HID descriptors against VID/PID. Reflashing a different
- * mode while keeping the same PID leaves the stale descriptor in place and
- * the device misbehaves in ways that look like a firmware bug. Separate PIDs
- * make a mode change look like a different device, which it effectively is.
+ * Windows caches HID descriptors against VID/PID. Switching mode while
+ * keeping the same PID leaves the stale descriptor in place and the device
+ * misbehaves in ways that look like a firmware bug. Separate PIDs make a
+ * mode change look like a different device, which it effectively is.
  */
-#if OUTPUT_MODE == OUT_KEYBOARD
-  #define USB_PID      0xB170
-  #define PRODUCT_STR  "BitCon (keyboard)"
-#elif OUTPUT_MODE == OUT_GAMEPAD
-  #define USB_PID      0xB171
-  #define PRODUCT_STR  "BitCon (gamepad)"
-#else
-  #define USB_PID      0xB172
-  #define PRODUCT_STR  "BitCon (composite)"
-#endif
+static uint16_t usb_pid(void)
+{
+    switch (settings_mode()) {
+    case OUT_KEYBOARD: return 0xB170;
+    case OUT_GAMEPAD:  return 0xB171;
+    default:           return 0xB172;
+    }
+}
 
-static tusb_desc_device_t const desc_device = {
+static tusb_desc_device_t desc_device = {
     .bLength            = sizeof(tusb_desc_device_t),
     .bDescriptorType    = TUSB_DESC_DEVICE,
     .bcdUSB             = 0x0200,
-    .bDeviceClass       = 0x00,
-    .bDeviceSubClass    = 0x00,
-    .bDeviceProtocol    = 0x00,
+
+    /* Interface Association Descriptors, required by the CDC function. */
+    .bDeviceClass       = TUSB_CLASS_MISC,
+    .bDeviceSubClass    = MISC_SUBCLASS_COMMON,
+    .bDeviceProtocol    = MISC_PROTOCOL_IAD,
+
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
     .idVendor           = USB_VID,
-    .idProduct          = USB_PID,
-    .bcdDevice          = 0x0100,
+    .idProduct          = 0,  /* set from the mode at enumeration */
+
+    /* Bumped whenever the interface layout changes, for the same reason
+     * as the per-mode PIDs. 0x0200 added the CDC port. */
+    .bcdDevice          = 0x0200,
+
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
     .iSerialNumber      = 0x03,
@@ -57,6 +65,7 @@ static tusb_desc_device_t const desc_device = {
 
 uint8_t const *tud_descriptor_device_cb(void)
 {
+    desc_device.idProduct = usb_pid();
     return (uint8_t const *)&desc_device;
 }
 
@@ -64,7 +73,6 @@ uint8_t const *tud_descriptor_device_cb(void)
  *  Report descriptors
  * ============================================================= */
 
-#if BITCON_HAS_KEYBOARD
 /*
  * NKRO bitmap keyboard: one bit per keycode from 0x00 to 0x7F, 16 bytes
  * total. No 6-key-rollover limit. Modifiers (0xE0-0xE7) fall inside the
@@ -84,9 +92,7 @@ static uint8_t const desc_hid_keyboard[] = {
     0x81, 0x02,        /*   Input (Data, Var, Abs)         */
     0xC0               /* End Collection                   */
 };
-#endif
 
-#if BITCON_HAS_GAMEPAD
 /*
  * Gamepad: 16 buttons plus X and Y, packed into 4 bytes.
  *
@@ -118,46 +124,48 @@ static uint8_t const desc_hid_gamepad[] = {
 
     0xC0               /* End Collection                   */
 };
-#endif
+
+/*
+ * TinyUSB numbers HID instances in the order the interfaces appear in the
+ * configuration descriptor, so the keyboard always comes first.
+ */
+int usb_hid_keyboard_instance(void)
+{
+    return settings_mode() == OUT_GAMEPAD ? -1 : 0;
+}
+
+int usb_hid_gamepad_instance(void)
+{
+    switch (settings_mode()) {
+    case OUT_GAMEPAD:   return 0;
+    case OUT_COMPOSITE: return 1;
+    default:            return -1;
+    }
+}
 
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
 {
-#if OUTPUT_MODE == OUT_COMPOSITE
-    return (instance == ITF_KEYBOARD) ? desc_hid_keyboard : desc_hid_gamepad;
-#elif OUTPUT_MODE == OUT_KEYBOARD
-    (void)instance;
-    return desc_hid_keyboard;
-#else
-    (void)instance;
-    return desc_hid_gamepad;
-#endif
+    return (int)instance == usb_hid_keyboard_instance() ? desc_hid_keyboard
+                                                        : desc_hid_gamepad;
 }
 
 /* =============================================================
- *  Configuration descriptor
+ *  Configuration descriptors
  * ============================================================= */
 
 enum {
-#if BITCON_HAS_KEYBOARD
-    ITF_NUM_KEYBOARD,
-#endif
-#if BITCON_HAS_GAMEPAD
-    ITF_NUM_GAMEPAD,
-#endif
-    ITF_NUM_TOTAL
+    STR_LANGID,
+    STR_MANUFACTURER,
+    STR_PRODUCT,
+    STR_SERIAL,
+    STR_CDC,
 };
 
-#if OUTPUT_MODE == OUT_COMPOSITE
-  #define EPNUM_KEYBOARD 0x81
-  #define EPNUM_GAMEPAD  0x82
-  #define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN)
-#elif OUTPUT_MODE == OUT_KEYBOARD
-  #define EPNUM_KEYBOARD 0x81
-  #define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
-#else
-  #define EPNUM_GAMEPAD  0x81
-  #define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
-#endif
+#define EPNUM_HID_1      0x81
+#define EPNUM_HID_2      0x82
+#define EPNUM_CDC_NOTIF  0x83
+#define EPNUM_CDC_OUT    0x04
+#define EPNUM_CDC_IN     0x84
 
 /*
  * Measured draw with 3.3 V bare LEDs is about 86 mA at the USB port, so
@@ -166,27 +174,46 @@ enum {
  */
 #define POWER_MA 150
 
-static uint8_t const desc_configuration[] = {
-    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN,
-                          TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, POWER_MA),
+#define CONFIG_ATTR      TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP
+#define CONFIG_LEN_ONE   (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN)
+#define CONFIG_LEN_BOTH  (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN + TUD_CDC_DESC_LEN)
 
-#if BITCON_HAS_KEYBOARD
-    TUD_HID_DESCRIPTOR(ITF_NUM_KEYBOARD, 0, HID_ITF_PROTOCOL_NONE,
-                       sizeof(desc_hid_keyboard), EPNUM_KEYBOARD,
-                       CFG_TUD_HID_EP_BUFSIZE, 1),
-#endif
+/* The CDC function takes two interfaces: control and data. */
+#define CDC_DESCRIPTOR(itf) \
+    TUD_CDC_DESCRIPTOR(itf, STR_CDC, EPNUM_CDC_NOTIF, 8, \
+                       EPNUM_CDC_OUT, EPNUM_CDC_IN, CFG_TUD_CDC_EP_BUFSIZE)
 
-#if BITCON_HAS_GAMEPAD
-    TUD_HID_DESCRIPTOR(ITF_NUM_GAMEPAD, 0, HID_ITF_PROTOCOL_NONE,
-                       sizeof(desc_hid_gamepad), EPNUM_GAMEPAD,
-                       CFG_TUD_HID_EP_BUFSIZE, 1),
-#endif
+static uint8_t const desc_config_keyboard[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 3, 0, CONFIG_LEN_ONE, CONFIG_ATTR, POWER_MA),
+    TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_keyboard),
+                       EPNUM_HID_1, CFG_TUD_HID_EP_BUFSIZE, 1),
+    CDC_DESCRIPTOR(1),
+};
+
+static uint8_t const desc_config_gamepad[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 3, 0, CONFIG_LEN_ONE, CONFIG_ATTR, POWER_MA),
+    TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_gamepad),
+                       EPNUM_HID_1, CFG_TUD_HID_EP_BUFSIZE, 1),
+    CDC_DESCRIPTOR(1),
+};
+
+static uint8_t const desc_config_composite[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_LEN_BOTH, CONFIG_ATTR, POWER_MA),
+    TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_keyboard),
+                       EPNUM_HID_1, CFG_TUD_HID_EP_BUFSIZE, 1),
+    TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_gamepad),
+                       EPNUM_HID_2, CFG_TUD_HID_EP_BUFSIZE, 1),
+    CDC_DESCRIPTOR(2),
 };
 
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
 {
     (void)index;
-    return desc_configuration;
+    switch (settings_mode()) {
+    case OUT_KEYBOARD: return desc_config_keyboard;
+    case OUT_GAMEPAD:  return desc_config_gamepad;
+    default:           return desc_config_composite;
+    }
 }
 
 /* =============================================================
@@ -195,12 +222,14 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
 
 static char serial_str[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
 
-static char const *string_desc_arr[] = {
-    (const char[]){ 0x09, 0x04 },  /* 0: en-US                          */
-    "DIY",                         /* 1: manufacturer                   */
-    PRODUCT_STR,                   /* 2: product                        */
-    serial_str,                    /* 3: serial, from board unique ID   */
-};
+static char const *product_str(void)
+{
+    switch (settings_mode()) {
+    case OUT_KEYBOARD: return "BitCon (keyboard)";
+    case OUT_GAMEPAD:  return "BitCon (gamepad)";
+    default:           return "BitCon (composite)";
+    }
+}
 
 static uint16_t _desc_str[32];
 
@@ -209,19 +238,24 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid)
     (void)langid;
     uint8_t chr_count;
 
-    if (index == 0) {
+    if (index == STR_LANGID) {
         _desc_str[1] = 0x0409;
         chr_count = 1;
     } else {
-        if (index >= sizeof(string_desc_arr) / sizeof(string_desc_arr[0])) {
-            return NULL;
+        const char *str;
+        switch (index) {
+        case STR_MANUFACTURER: str = "DIY";            break;
+        case STR_PRODUCT:      str = product_str();    break;
+        case STR_SERIAL:
+            if (serial_str[0] == '\0') {
+                pico_get_unique_board_id_string(serial_str, sizeof(serial_str));
+            }
+            str = serial_str;
+            break;
+        case STR_CDC:          str = "BitCon Config";  break;
+        default:               return NULL;
         }
 
-        if (index == 3 && serial_str[0] == '\0') {
-            pico_get_unique_board_id_string(serial_str, sizeof(serial_str));
-        }
-
-        const char *str = string_desc_arr[index];
         chr_count = (uint8_t)strlen(str);
         if (chr_count > 31) chr_count = 31;
 

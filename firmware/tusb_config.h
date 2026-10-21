@@ -1,8 +1,8 @@
 /*
  * tusb_config.h - TinyUSB configuration.
  *
- * Includes config.h so that CFG_TUD_HID follows OUTPUT_MODE automatically.
- * config.h has no TinyUSB dependency, so this cannot go circular.
+ * Sized for the largest layout, composite mode. The other modes simply
+ * leave the second HID instance unused.
  */
 
 #ifndef TUSB_CONFIG_H
@@ -11,8 +11,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "config.h"
 
 /* The pico-sdk tinyusb_device library normally defines this for us. */
 #ifndef CFG_TUSB_MCU
@@ -40,10 +38,15 @@ extern "C" {
 
 #define CFG_TUD_ENDPOINT0_SIZE 64
 
-/* 1 for keyboard-only or gamepad-only, 2 for composite. */
-#define CFG_TUD_HID           HID_INSTANCE_COUNT
+/* Keyboard and gamepad. Single-interface modes use only instance 0. */
+#define CFG_TUD_HID           2
 
-#define CFG_TUD_CDC           0
+/* Configurator serial port. Present in every mode. */
+#define CFG_TUD_CDC           1
+#define CFG_TUD_CDC_RX_BUFSIZE 256
+#define CFG_TUD_CDC_TX_BUFSIZE 1024
+#define CFG_TUD_CDC_EP_BUFSIZE 64
+
 #define CFG_TUD_MSC           0
 #define CFG_TUD_MIDI          0
 #define CFG_TUD_VENDOR        0

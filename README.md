@@ -21,7 +21,7 @@ Composed of:
 
 ## Circuit preview
 
-![Circuit](circuit/top.png)
+![Circuit](circuit/pcb.png)
 
 ## Configurator
 

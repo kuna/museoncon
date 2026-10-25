@@ -71,7 +71,7 @@ unplugging and firmware updates. `DEFAULT_OUTPUT_MODE` in `config.h` (or
 | Mode | What the host sees | Turntable |
 |---|---|---|
 | `OUT_KEYBOARD` | NKRO keyboard | Two direction keys |
-| `OUT_GAMEPAD` | 16-button gamepad, X/Y axes | Axis or two buttons |
+| `OUT_GAMEPAD` | 16-button gamepad, X/Y axes | Y axis or two buttons |
 | `OUT_COMPOSITE` | Both, as independent interfaces | Both representations at once |
 
 Gamepad is the default. Every mode also exposes a CDC serial port, the
@@ -108,8 +108,8 @@ stream. Any serial terminal works too, e.g. `screen /dev/cu.usbmodem* 115200`.
 
 `TT_GAMEPAD_STYLE` controls how the turntable appears in gamepad mode.
 
-`TT_AXIS` (default) maps disc position onto an absolute 8-bit axis that
-wraps every revolution. This is what real IIDX hardware does, and games
+`TT_AXIS` (default) maps disc position onto the Y axis, an absolute 8-bit
+value that wraps every revolution. This is what real IIDX hardware does, and games
 read the wrap as continuous motion rather than a jump. Scale it with
 `TT_COUNTS_PER_REV`, which should be 4 × the slot count on your encoder
 disc — quadrature yields four counts per slot.

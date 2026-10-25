@@ -96,7 +96,7 @@ static uint8_t const desc_hid_keyboard[] = {
 /*
  * Gamepad: 16 buttons plus X and Y, packed into 4 bytes.
  *
- * X carries the turntable. Y is declared but held centred - some
+ * Y carries the turntable. X is declared but held centred - some
  * DirectInput drivers will not enumerate a single-axis controller.
  */
 static uint8_t const desc_hid_gamepad[] = {

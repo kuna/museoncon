@@ -36,7 +36,7 @@
 /*
  * How the turntable is represented in gamepad mode.
  *
- *   TT_AXIS    - absolute wrapping 8-bit axis. This is what real IIDX
+ *   TT_AXIS    - absolute wrapping 8-bit Y axis. This is what real IIDX
  *                controllers do, and what most rhythm games expect.
  *   TT_DIGITAL - two direction buttons, same behaviour as keyboard mode.
  *

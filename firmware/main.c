@@ -288,8 +288,8 @@ static void keyboard_task(uint8_t instance)
 
 typedef struct __attribute__((packed)) {
     uint16_t buttons;  /* 16 buttons, bit 0 = button 1 */
-    uint8_t  x;        /* turntable */
-    uint8_t  y;        /* unused, held centred */
+    uint8_t  x;        /* unused, held centred */
+    uint8_t  y;        /* turntable */
 } gamepad_report_t;
 
 #if TT_GAMEPAD_STYLE == TT_AXIS
@@ -316,19 +316,19 @@ static void gamepad_task(uint8_t instance)
     report.buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
 
 #if TT_GAMEPAD_STYLE == TT_AXIS
-    report.x = turntable_axis();
+    report.y = turntable_axis();
 #else
     if (state & (1u << KEY_CW_BIT))  report.buttons |= (1u << (NUM_BTN + 0));
     if (state & (1u << KEY_CCW_BIT)) report.buttons |= (1u << (NUM_BTN + 1));
-    report.x = 128;
+    report.y = 128;
 #endif
 
     /*
-     * Y is present but fixed at centre. Some DirectInput drivers refuse to
+     * X is present but fixed at centre. Some DirectInput drivers refuse to
      * enumerate a controller that declares only one axis, so the cost of a
      * spare byte buys broad compatibility.
      */
-    report.y = 128;
+    report.x = 128;
 
     static gamepad_report_t prev;
     static bool             primed = false;

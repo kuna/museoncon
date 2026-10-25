@@ -305,14 +305,14 @@ static void test_gamepad_report(void)
 
     gamepad_report_t r;
     r.buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
-    r.x = axis_from(TT_COUNTS_PER_REV / 4);
-    r.y = 128;
+    r.x = 128;
+    r.y = axis_from(TT_COUNTS_PER_REV / 4);
 
     CHECK((r.buttons & (1u << 0)) != 0, "button 1 set");
     CHECK((r.buttons & (1u << 8)) != 0, "button 9 set");
     CHECK((r.buttons & (1u << 4)) == 0, "button 5 clear");
-    CHECK(r.x == 64, "quarter revolution maps to 64");
-    CHECK(r.y == 128, "Y stays centred");
+    CHECK(r.y == 64, "quarter revolution maps to 64 on Y");
+    CHECK(r.x == 128, "X stays centred");
 
     /* Button field must not leak the turntable bits in axis mode. */
     state = 0xFFFFFFFFu;

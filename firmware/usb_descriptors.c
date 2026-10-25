@@ -22,6 +22,15 @@
 
 #define USB_VID 0xCAFE  /* Placeholder. Get a real VID/PID before distributing. */
 
+/* Konami's official INFINITAS controller; see INFINITAS_OFFICIAL_ID. */
+#define KONAMI_VID           0x1CCF
+#define KONAMI_INFINITAS_PID 0x8048
+
+static bool official_infinitas(void)
+{
+    return INFINITAS_OFFICIAL_ID && settings_mode() == OUT_INFINITAS;
+}
+
 /*
  * Each USB layout gets its own PID.
  *
@@ -30,13 +39,16 @@
  * misbehaves in ways that look like a firmware bug. Separate PIDs make a
  * layout change look like a different device, which it effectively is.
  *
- * The three gamepad modes share one report descriptor and differ only in
- * which fields carry the turntable, so they share a PID.
+ * LR2 and beatoraja share one report descriptor and differ only in which
+ * fields carry the turntable, so they share a PID. INFINITAS has its own
+ * report layout and so its own PID.
  */
 static uint16_t usb_pid(void)
 {
     const uint8_t mode = settings_mode();
-    if (mode == OUT_KEYBOARD) return 0xB170;
+    if (official_infinitas())   return KONAMI_INFINITAS_PID;
+    if (mode == OUT_KEYBOARD)   return 0xB170;
+    if (mode == OUT_INFINITAS)  return 0xB173;
     if (settings_mode_is_gamepad(mode)) return 0xB171;
     return 0xB172;
 }
@@ -52,8 +64,8 @@ static tusb_desc_device_t desc_device = {
     .bDeviceProtocol    = MISC_PROTOCOL_IAD,
 
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
-    .idVendor           = USB_VID,
-    .idProduct          = 0,  /* set from the mode at enumeration */
+    .idVendor           = USB_VID,  /* both set from the mode at enumeration */
+    .idProduct          = 0,
 
     /* Bumped whenever the interface layout changes, for the same reason
      * as the per-mode PIDs. 0x0200 added the CDC port. */
@@ -67,6 +79,7 @@ static tusb_desc_device_t desc_device = {
 
 uint8_t const *tud_descriptor_device_cb(void)
 {
+    desc_device.idVendor  = official_infinitas() ? KONAMI_VID : USB_VID;
     desc_device.idProduct = usb_pid();
     return (uint8_t const *)&desc_device;
 }
@@ -98,7 +111,7 @@ static uint8_t const desc_hid_keyboard[] = {
 /*
  * Gamepad: 16 buttons plus X and Y, packed into 4 bytes.
  *
- * X carries the turntable in beatoraja and INFINITAS modes, matching the
+ * X carries the turntable in beatoraja and composite modes, matching the
  * official controller. Y is declared but held centred - some DirectInput
  * drivers will not enumerate a single-axis controller.
  */
@@ -144,10 +157,45 @@ int usb_hid_gamepad_instance(void)
     return mode == OUT_COMPOSITE ? 1 : -1;
 }
 
+/*
+ * INFINITAS: the official controller's input report as arcin reproduces
+ * it. Report ID 1, then 15 buttons and a padding bit, then X and Y. The
+ * game reads keys and E buttons from fixed button numbers and the
+ * turntable from X.
+ */
+static uint8_t const desc_hid_infinitas[] = {
+    0x05, 0x01,        /* Usage Page (Generic Desktop)     */
+    0x09, 0x05,        /* Usage (Game Pad)                 */
+    0xA1, 0x01,        /* Collection (Application)         */
+    0x85, INFINITAS_REPORT_ID, /* Report ID                */
+
+    0x05, 0x09,        /*   Usage Page (Button)            */
+    0x19, 0x01,        /*   Usage Minimum (Button 1)       */
+    0x29, 0x0F,        /*   Usage Maximum (Button 15)      */
+    0x15, 0x00,        /*   Logical Minimum (0)            */
+    0x25, 0x01,        /*   Logical Maximum (1)            */
+    0x75, 0x01,        /*   Report Size (1)                */
+    0x95, 0x0F,        /*   Report Count (15)              */
+    0x81, 0x02,        /*   Input (Data, Var, Abs)         */
+    0x95, 0x01,        /*   Report Count (1)               */
+    0x81, 0x03,        /*   Input (Const) - padding        */
+
+    0x05, 0x01,        /*   Usage Page (Generic Desktop)   */
+    0x09, 0x30,        /*   Usage (X)                      */
+    0x09, 0x31,        /*   Usage (Y)                      */
+    0x15, 0x00,        /*   Logical Minimum (0)            */
+    0x26, 0xFF, 0x00,  /*   Logical Maximum (255)          */
+    0x75, 0x08,        /*   Report Size (8)                */
+    0x95, 0x02,        /*   Report Count (2)               */
+    0x81, 0x02,        /*   Input (Data, Var, Abs)         */
+
+    0xC0               /* End Collection                   */
+};
+
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
 {
-    return (int)instance == usb_hid_keyboard_instance() ? desc_hid_keyboard
-                                                        : desc_hid_gamepad;
+    if ((int)instance == usb_hid_keyboard_instance()) return desc_hid_keyboard;
+    return settings_mode() == OUT_INFINITAS ? desc_hid_infinitas : desc_hid_gamepad;
 }
 
 /* =============================================================
@@ -198,6 +246,13 @@ static uint8_t const desc_config_gamepad[] = {
     CDC_DESCRIPTOR(1),
 };
 
+static uint8_t const desc_config_infinitas[] = {
+    TUD_CONFIG_DESCRIPTOR(1, 3, 0, CONFIG_LEN_ONE, CONFIG_ATTR, POWER_MA),
+    TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_infinitas),
+                       EPNUM_HID_1, CFG_TUD_HID_EP_BUFSIZE, 1),
+    CDC_DESCRIPTOR(1),
+};
+
 static uint8_t const desc_config_composite[] = {
     TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_LEN_BOTH, CONFIG_ATTR, POWER_MA),
     TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_keyboard),
@@ -211,7 +266,8 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
 {
     (void)index;
     const uint8_t mode = settings_mode();
-    if (mode == OUT_KEYBOARD) return desc_config_keyboard;
+    if (mode == OUT_KEYBOARD)  return desc_config_keyboard;
+    if (mode == OUT_INFINITAS) return desc_config_infinitas;
     if (settings_mode_is_gamepad(mode)) return desc_config_gamepad;
     return desc_config_composite;
 }

@@ -290,7 +290,7 @@
         <label class="mode">
           <input type="radio" name="mode" value="infinitas">
           <b>GAMEPAD · INFINITAS</b>
-          <span>Turntable as an analog X axis, like the official controller. Also for beatoraja with analog scratch on.</span>
+          <span>Poses as the official INFINITAS controller (experimental): its button layout, analog X axis turntable. Also for beatoraja with analog scratch on.</span>
         </label>
         <label class="mode">
           <input type="radio" name="mode" value="keyboard">
@@ -319,8 +319,15 @@
 (() => {
   'use strict';
 
-  const VID = 0xCAFE;
-  const PIDS = [0xB170, 0xB171, 0xB172];
+  // BitCon's own IDs, plus Konami's official-controller ID that INFINITAS
+  // mode reports. Only BitCon exposes a serial port under the latter.
+  const DEVICES = [
+    { usbVendorId: 0xCAFE, usbProductId: 0xB170 },  // keyboard
+    { usbVendorId: 0xCAFE, usbProductId: 0xB171 },  // LR2, beatoraja
+    { usbVendorId: 0xCAFE, usbProductId: 0xB172 },  // composite
+    { usbVendorId: 0xCAFE, usbProductId: 0xB173 },  // INFINITAS, own ID
+    { usbVendorId: 0x1CCF, usbProductId: 0x8048 },  // INFINITAS, official ID
+  ];
   const MODE_LABEL = {
     keyboard: 'KEYBOARD',
     lr2: 'GAMEPAD · LR2',
@@ -521,7 +528,7 @@
 
   function isBitcon(p) {
     const i = p.getInfo();
-    return i.usbVendorId === VID && PIDS.includes(i.usbProductId);
+    return DEVICES.some((d) => d.usbVendorId === i.usbVendorId && d.usbProductId === i.usbProductId);
   }
 
   // quiet: skip the error notice, for ports another tab may already hold.
@@ -598,7 +605,7 @@
       setStatus('busy', 'Restarting…');
       reconnectTimer = setTimeout(() => {
         setStatus('off', 'Not connected');
-        notify('The browser needs permission once per controller for each of keyboard, gamepad and composite modes. Press Connect and select BitCon again.', true);
+        notify('The browser needs permission once per controller for each USB identity (keyboard, LR2/beatoraja, INFINITAS, composite). Press Connect and select BitCon again.', true);
       }, RECONNECT_HINT_MS);
     } else if (rebooting === 'bootsel') {
       rebooting = null;
@@ -622,7 +629,7 @@
   $('connect').addEventListener('click', async () => {
     if (port) return disconnect();
     try {
-      const p = await navigator.serial.requestPort({ filters: [{ usbVendorId: VID }] });
+      const p = await navigator.serial.requestPort({ filters: DEVICES });
       await connectTo(p);
     } catch (e) {
       if (e.name !== 'NotFoundError') notify(`Connection failed: ${e.message}`, true);

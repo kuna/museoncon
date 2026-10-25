@@ -25,7 +25,7 @@ add_executable(bitcon
 )
 
 target_compile_definitions(bitcon PRIVATE
-    BITCON_FW_VERSION="${PROJECT_VERSION}"
+    BITCON_FW_VERSION="${PROJECT_VERSION}-infinitas"  # experimental branch
 )
 
 target_include_directories(bitcon PRIVATE

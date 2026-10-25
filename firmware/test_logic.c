@@ -24,8 +24,12 @@
 #define KEY_CCW_BIT                (NUM_BTN + 1)
 
 #define OUT_INFINITAS  2
+#define OUT_COMPOSITE  3
 #define OUT_LR2        4
 #define OUT_BEATORAJA  5
+
+/* INFINITAS layout from config.h: BitCon button i drives bit INF[i]. */
+static const uint8_t INFINITAS_BITS[NUM_BTN] = { 8, 0, 1, 2, 3, 4, 5, 6, 9 };
 
 static int failures = 0;
 
@@ -394,6 +398,21 @@ typedef struct __attribute__((packed)) {
     uint8_t  y;
 } gamepad_report_t;
 
+/* Mirrors infinitas_buttons() and analog_axis() in main.c. */
+static uint16_t infinitas_buttons(uint32_t state)
+{
+    uint16_t out = 0;
+    for (int i = 0; i < NUM_BTN; i++) {
+        if (state & (1u << i)) out |= (uint16_t)(1u << INFINITAS_BITS[i]);
+    }
+    return out;
+}
+
+static uint8_t reversible_axis(int32_t pos, int reverse)
+{
+    return analog_axis(reverse ? -pos : pos);
+}
+
 /* Mirrors gamepad_task() in main.c. */
 static gamepad_report_t make_gamepad(uint8_t mode, uint32_t state, int32_t axis_pos)
 {
@@ -415,6 +434,10 @@ static gamepad_report_t make_gamepad(uint8_t mode, uint32_t state, int32_t axis_
         if (cw)  r.x = 255;
         if (ccw) r.x = 0;
         break;
+    case OUT_INFINITAS:
+        r.buttons = infinitas_buttons(state);
+        r.x = analog_axis(axis_pos);
+        break;
     default:
         r.x = analog_axis(axis_pos);
         break;
@@ -435,7 +458,9 @@ static void test_gamepad_report(void)
 
     for (int m = 0; m < 3; m++) {
         gamepad_report_t r = make_gamepad(modes[m], btns | cw, 0);
-        CHECK((r.buttons & 0x1FF) == btns, "buttons 1-9 map straight through");
+        if (modes[m] != OUT_INFINITAS) {
+            CHECK((r.buttons & 0x1FF) == btns, "buttons 1-9 map straight through");
+        }
         CHECK(r.y == 128, "Y stays centred");
     }
 
@@ -459,6 +484,26 @@ static void test_gamepad_report(void)
     CHECK(r.x == 100 && r.buttons == 0, "INFINITAS: X is the position, no turntable buttons");
     r = make_gamepad(OUT_INFINITAS, 0, -1);
     CHECK(r.x == 254, "INFINITAS: negative positions wrap");
+
+    /* Official layout: keys 1-7 on bits 0-6, E1/E2 on bits 8/9. */
+    uint16_t keys = 0;
+    for (int i = 1; i <= 7; i++) keys |= infinitas_buttons(1u << i);
+    CHECK(keys == 0x7F, "INFINITAS: buttons 2-8 become keys 1-7");
+    CHECK(infinitas_buttons(1u << 0) == (1u << 8), "INFINITAS: button 1 is E1");
+    CHECK(infinitas_buttons(1u << 8) == (1u << 9), "INFINITAS: button 9 is E2");
+    CHECK((infinitas_buttons(0x1FF) & ~0x37Fu) == 0,
+          "INFINITAS: button 8 and bits 10-15 stay clear");
+    CHECK((infinitas_buttons(0xFFFFFFFFu) & (1u << 15)) == 0,
+          "INFINITAS: the padding bit is never set");
+
+    /* Reversal flips direction, keeping the 2-units-per-count step. */
+    CHECK(reversible_axis(1, 1) == 254 && reversible_axis(1, 0) == 2,
+          "INFINITAS: reversing turns +1 count into -2 units");
+    CHECK((uint8_t)(reversible_axis(10, 1) - reversible_axis(9, 1)) == 254,
+          "INFINITAS: reversed axis still moves 2 units per count");
+
+    r = make_gamepad(OUT_COMPOSITE, btns, 50);
+    CHECK(r.buttons == btns && r.x == 100, "composite: plain buttons, analog X");
 }
 
 /* ============================================================= */

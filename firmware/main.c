@@ -345,13 +345,34 @@ static void keyboard_task(uint8_t instance)
  *  core0 - gamepad reports
  * ============================================================= */
 
+/* Every gamepad mode sends this shape; INFINITAS mode lays the button bits
+ * out like the official controller and prefixes a report ID. */
 typedef struct __attribute__((packed)) {
-    uint16_t buttons;  /* 16 buttons, bit 0 = button 1 */
+    uint16_t buttons;  /* bit 0 = button 1 */
     uint8_t  x;        /* turntable, except in LR2 mode */
     uint8_t  y;        /* unused, held centred */
 } gamepad_report_t;
 
 #define AXIS_CENTRE 128
+
+static const uint8_t INFINITAS_BITS[NUM_BTN] = INFINITAS_BUTTON_LIST;
+
+static uint16_t infinitas_buttons(uint32_t state)
+{
+    uint16_t out = 0;
+    for (int i = 0; i < NUM_BTN; i++) {
+        if (state & (1u << i)) out |= (uint16_t)(1u << INFINITAS_BITS[i]);
+    }
+    return out;
+}
+
+/* The disc position as an 8-bit axis. Converting to uint8_t is modulo 256,
+ * negative positions included, which gives the wrap for free. */
+static uint8_t analog_axis(void)
+{
+    const int32_t pos = TT_ANALOG_REVERSE ? -g_tt_axis : g_tt_axis;
+    return (uint8_t)(pos * TT_ANALOG_UNITS_PER_COUNT);
+}
 
 static void gamepad_task(uint8_t instance, uint8_t mode)
 {
@@ -372,6 +393,8 @@ static void gamepad_task(uint8_t instance, uint8_t mode)
         .y       = AXIS_CENTRE,
     };
 
+    uint8_t report_id = 0;
+
     switch (mode) {
     case OUT_LR2:
         if (cw)  report.buttons |= (1u << (NUM_BTN + 0));
@@ -382,10 +405,14 @@ static void gamepad_task(uint8_t instance, uint8_t mode)
         if (cw)  report.x = 255;
         if (ccw) report.x = 0;
         break;
+    case OUT_INFINITAS:
+        report.buttons = infinitas_buttons(state);
+        report.x       = analog_axis();
+        report_id      = INFINITAS_REPORT_ID;
+        break;
     default:
-        /* INFINITAS and composite. Converting to uint8_t is modulo 256,
-         * negative positions included, which gives the wrap for free. */
-        report.x = (uint8_t)(g_tt_axis * TT_ANALOG_UNITS_PER_COUNT);
+        /* Composite: INFINITAS-style axis, plain button layout. */
+        report.x = analog_axis();
         break;
     }
 
@@ -394,7 +421,7 @@ static void gamepad_task(uint8_t instance, uint8_t mode)
 
     if (primed && memcmp(&report, &prev, sizeof(report)) == 0) return;
 
-    if (tud_hid_n_report(instance, 0, &report, sizeof(report))) {
+    if (tud_hid_n_report(instance, report_id, &report, sizeof(report))) {
         memcpy(&prev, &report, sizeof(report));
         primed = true;
     }

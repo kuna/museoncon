@@ -27,7 +27,9 @@
  *                   path (analog scratch off) treats an axis past +-0.9 as a
  *                   pressed scratch.
  *   OUT_INFINITAS - turntable as an analog X axis holding the disc position,
- *                   wrapping every 256 units, like the official controller.
+ *                   wrapping every 256 units, and the rest of the report
+ *                   laid out like the official controller, whose USB ID
+ *                   it borrows (experimental, see INFINITAS_OFFICIAL_ID).
  *                   Also suits beatoraja with analog scratch on.
  *
  * OUT_INFINITAS keeps the value the single gamepad mode used to have, so a
@@ -121,11 +123,61 @@
 }
 
 /*
- * Gamepad modes: buttons 1..9 map straight through to gamepad buttons 1..9.
- * In LR2 mode the turntable adds buttons 10 (clockwise) and 11.
- * The descriptor declares 16 buttons, so there is room to grow.
+ * LR2 and beatoraja modes: buttons 1..9 map straight through to gamepad
+ * buttons 1..9. In LR2 mode the turntable adds buttons 10 (clockwise) and
+ * 11. The descriptor declares 16 buttons, so there is room to grow.
+ * INFINITAS mode uses its own layout; see below.
  */
 #define GAMEPAD_BUTTON_COUNT 16
+
+/* =============================================================
+ *  INFINITAS mode (experimental)
+ * ============================================================= */
+
+/*
+ * Report as Konami's official INFINITAS controller (VID 0x1CCF, PID 0x8048),
+ * as the arcin firmware does. INFINITAS recognises it and applies its own
+ * fixed key layout, so its in-game key config is neither needed nor
+ * honoured: press "デフォルトに戻す" (reset to default) in its settings once.
+ *
+ * These are Konami's USB IDs, used here only so the game talks to the
+ * controller. Set to 0 to keep BitCon's own IDs; INFINITAS then sees a
+ * generic controller, if it accepts one at all.
+ */
+#ifndef INFINITAS_OFFICIAL_ID
+#define INFINITAS_OFFICIAL_ID 1
+#endif
+
+/*
+ * Button bits of the official controller's report: keys 1-7 on buttons 1-7
+ * and E1-E4 on buttons 9-12, per arcin. Button 8 is unused.
+ */
+#define INF_KEY1  0
+#define INF_KEY2  1
+#define INF_KEY3  2
+#define INF_KEY4  3
+#define INF_KEY5  4
+#define INF_KEY6  5
+#define INF_KEY7  6
+#define INF_E1    8
+#define INF_E2    9
+#define INF_E3    10
+#define INF_E4    11
+
+/*
+ * Which INFINITAS input each BitCon button drives, in button order.
+ *
+ * Assumes the top plate's layout: the zig-zag of seven large buttons
+ * (2-8) are keys 1-7, white keys below and black keys above, and the two
+ * small square buttons at the ends (1 and 9) are E1 and E2. Swap entries
+ * here if your buttons sit differently. E3 and E4 stay unassigned.
+ */
+#define INFINITAS_BUTTON_LIST {                          \
+    INF_E1,                                              \
+    INF_KEY1, INF_KEY2, INF_KEY3, INF_KEY4,              \
+    INF_KEY5, INF_KEY6, INF_KEY7,                        \
+    INF_E2,                                              \
+}
 
 /* =============================================================
  *  Input pull-ups
@@ -222,6 +274,15 @@
 
 #ifndef TT_ANALOG_REVERSE_COUNTS
 #define TT_ANALOG_REVERSE_COUNTS 2
+#endif
+
+/*
+ * Flip the analog axis direction. Scratch notes do not care which way the
+ * disc turns, but song-select scrolling does: set to 1 if it runs
+ * backwards. arcin offers the same as its "analog reversed" mode.
+ */
+#ifndef TT_ANALOG_REVERSE
+#define TT_ANALOG_REVERSE 0
 #endif
 
 /*

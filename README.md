@@ -30,7 +30,7 @@ differently:
 |---|---|
 | beatoraja (analog scratch off, the default) | GAMEPAD · beatoraja |
 | LR2 | GAMEPAD · LR2 |
-| INFINITAS, or beatoraja with analog scratch on | GAMEPAD · INFINITAS |
+| INFINITAS (experimental), or beatoraja with analog scratch on | GAMEPAD · INFINITAS |
 
 Open the file directly in Chrome or Edge on a desktop (Web Serial is not
 available in Firefox or Safari), plug in the controller, and press Connect.

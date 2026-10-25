@@ -10,4 +10,8 @@
 int usb_hid_keyboard_instance(void);
 int usb_hid_gamepad_instance(void);
 
+/* Report ID of the INFINITAS-mode gamepad report. The other modes' reports
+ * carry no ID. */
+#define INFINITAS_REPORT_ID 1
+
 #endif /* BITCON_USB_DESCRIPTORS_H */

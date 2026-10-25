@@ -72,7 +72,7 @@ unplugging and firmware updates. `DEFAULT_OUTPUT_MODE` in `config.h` (or
 |---|---|---|
 | `OUT_BEATORAJA` (default) | 16-button gamepad, X/Y axes | Digital X axis: full scale while spinning, centre when stopped |
 | `OUT_LR2` | Same gamepad | Buttons 10 (CW) and 11 (CCW) |
-| `OUT_INFINITAS` | Same gamepad | Analog X axis: disc position, wrapping every 256 units |
+| `OUT_INFINITAS` | Official INFINITAS controller (experimental): its USB ID, button layout and report | Analog X axis: disc position, wrapping every 256 units |
 | `OUT_KEYBOARD` | NKRO keyboard | Q / W keys, digital |
 | `OUT_COMPOSITE` | Keyboard and gamepad, as independent interfaces | Q / W on the keyboard, analog X axis on the gamepad |
 
@@ -142,13 +142,53 @@ after `TT_ANALOG_REVERSE_COUNTS` of travel. Use this mode for beatoraja too
 if you turn analog scratch on.
 
 The INFINITAS numbers come from community reverse engineering of the
-arcade game, not from Konami. INFINITAS also recognises the official
-controller by its USB VID/PID and then applies its own fixed key layout;
-BitCon keeps its own IDs, so whether INFINITAS accepts it as a generic
-controller is untested.
+arcade game, not from Konami. See [INFINITAS mode](#infinitas-mode-experimental)
+for how the controller presents itself to the game.
 
 Keyboard mode uses the digital logic with the LR2 hold. A keyboard has no
 axes.
+
+### INFINITAS mode (experimental)
+
+INFINITAS recognises Konami's official controller by its USB VID/PID and
+then applies its own fixed key layout, ignoring its key config screen.
+INFINITAS mode copies what arcin does to be recognised:
+
+- **USB ID**: Konami's VID `0x1CCF` / PID `0x8048`
+  (`INFINITAS_OFFICIAL_ID`). These are Konami's IDs, used only so the game
+  talks to the controller. Set it to 0 to keep BitCon's own ID (`0xB173`);
+  whether INFINITAS accepts a generic controller is untested.
+- **Report**: report ID 1, 15 buttons and a padding bit, then X and Y.
+  Keys 1–7 sit on buttons 1–7 and E1–E4 on buttons 9–12.
+- **Button layout** (`INFINITAS_BUTTON_LIST`): assumes the top plate's
+  seven zig-zag buttons (2–8) are keys 1–7 and the two small end buttons
+  (1 and 9) are E1 and E2. E3 and E4 are unassigned. Edit the list if your
+  buttons sit differently.
+- **Turntable**: the analog axis above. `TT_ANALOG_REVERSE` flips its
+  direction if song-select scrolling runs backwards; scratch notes do not
+  care.
+
+Button debounce needs no change: arcin recommends none for INFINITAS
+because its debounce adds delay, and BitCon's eager debounce adds none.
+
+The configurator still finds the controller in this mode; the browser asks
+for permission once, as for any new USB identity.
+
+**Testing it**
+
+1. Set the mode to GAMEPAD · INFINITAS in the configurator. The controller
+   restarts as the official controller.
+2. In INFINITAS's settings, press "デフォルトに戻す" (reset to default)
+   once. Do not rebind keys there.
+3. Check keys 1–7, E1 and E2, then the turntable: slow and fast scratches,
+   back-and-forth, and a few seconds resting on a slot edge (no phantom
+   scratches). Check song-select scroll direction.
+4. Repeat at 60 Hz and 120 Hz.
+
+If slow scratches drop, raise `TT_ANALOG_UNITS_PER_COUNT` to 3. If scratches
+fire with the disc at rest, raise `TT_ANALOG_REVERSE_COUNTS`. If INFINITAS
+does not react at all, check that Windows lists the device with VID `1CCF`
+and PID `8048`, and that no real official controller is plugged in.
 
 ## Design notes
 
@@ -203,14 +243,14 @@ both scratch directions exceeds that, so the keyboard interface uses a
 
 Windows caches HID descriptors against VID/PID. Switching layout under the
 same PID leaves the stale descriptor in place, producing symptoms that look
-like firmware bugs. Keyboard, gamepad and composite therefore each report
-their own PID, and `bcdDevice` is bumped whenever the interface layout
-changes. The three gamepad modes share one report descriptor, so they share
-a PID.
+like firmware bugs. Each layout therefore reports its own PID, and
+`bcdDevice` is bumped whenever the interface layout changes. LR2 and
+beatoraja share one report descriptor, so they share a PID; INFINITAS has
+its own report layout and ID.
 
 The browser treats each PID as a separate device too, so the configurator
-asks you to pick the port once more the first time you use keyboard,
-gamepad or composite. Switching between gamepad modes keeps the permission.
+asks you to pick the port once more the first time you use a new identity.
+Switching between LR2 and beatoraja keeps the permission.
 
 ### Several controllers
 
@@ -231,6 +271,9 @@ number, so a second controller, or another tab, cannot take its place.
 | `TT_BEATORAJA_SUSTAIN_US` | 100000 | Same, for beatoraja mode |
 | `TT_ANALOG_UNITS_PER_COUNT` | 2 | INFINITAS: slow scratches dropped (raise) or menus scroll too fast (lower) |
 | `TT_ANALOG_REVERSE_COUNTS` | 2 | INFINITAS: phantom scratches at rest (raise) or reversals feel late (lower) |
+| `TT_ANALOG_REVERSE` | 0 | INFINITAS: song select scrolls backwards (set 1) |
+| `INFINITAS_OFFICIAL_ID` | 1 | INFINITAS: report BitCon's own ID instead of Konami's (set 0) |
+| `INFINITAS_BUTTON_LIST` | E1, keys 1–7, E2 | INFINITAS: your buttons map to different keys |
 | `TT_COUNTS_PER_REV` | 192 | 4 × your disc's slot count; only the configurator uses it |
 
 All of these accept `-D` overrides from the build system, so you can sweep

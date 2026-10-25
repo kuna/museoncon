@@ -9,6 +9,12 @@ Composed of:
 * Circuit
 * Configurator (web page)
 
+## Demo
+
+[![MuseOnCon Test Page](https://img.youtube.com/vi/EVm9eWDQrEw/0.jpg)](https://youtube.com/shorts/EVm9eWDQrEw)
+
+[![MuseOnCon Test Play](https://img.youtube.com/vi/D9oin94_azk/0.jpg)](https://youtube.com/shorts/D9oin94_azk)
+
 ## Model preview
 
 ![Model](model/preview.png)

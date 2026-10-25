@@ -188,12 +188,16 @@
  * Reversing switches straight to the other direction; both are never held
  * at once.
  *
+ * The step is 3 rather than the minimum 2: when a fast back-and-forth
+ * scratch reverses, the disc rebounds slightly, and at 2 counts that
+ * rebound fired an extra scratch in beatoraja.
+ *
  * LR2 uses arcin's 200 ms, which fixed LR2 misfires on full-size
  * turntables. beatoraja uses DJ DAO's default 100 ms trigger window, which
  * releases sooner for backspin scratch ends. The keyboard follows LR2.
  */
 #ifndef TT_DIGITAL_STEP
-#define TT_DIGITAL_STEP 2                /* of 192 counts: 3.75 degrees */
+#define TT_DIGITAL_STEP 3                /* of 192 counts: 5.6 degrees */
 #endif
 
 #ifndef TT_LR2_SUSTAIN_US

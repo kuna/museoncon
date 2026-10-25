@@ -14,7 +14,7 @@
 #include <string.h>
 
 #define DEBOUNCE_US                1000
-#define TT_DIGITAL_STEP            2
+#define TT_DIGITAL_STEP            3
 #define TT_LR2_SUSTAIN_US          200000
 #define TT_BEATORAJA_SUSTAIN_US    100000
 #define TT_ANALOG_UNITS_PER_COUNT  2
@@ -170,16 +170,20 @@ static void test_turntable_digital(void)
         CHECK(gaps == 0, "a steady spin holds without flicker");
 
         /* Stop: held until one sustain window after the last step, which
-         * came at most one step (10 ms here) before the disc stopped. */
+         * came at most one step (5 ms per count here) before the disc
+         * stopped. */
         uint64_t stopped = t;
-        int8_t dir = tt_digital_update(&d, pos, stopped + sustain - 10000);
+        int8_t dir = tt_digital_update(&d, pos, stopped + sustain - TT_DIGITAL_STEP * 5000);
         CHECK(dir > 0, "direction is still held just inside the sustain window");
         dir = tt_digital_update(&d, pos, stopped + sustain + 1000);
         CHECK(dir == 0, "direction releases once the sustain window passes");
 
-        /* Spin again, then reverse: switches straight over, never both. */
+        /* Spin again a whole number of steps, then reverse: switches
+         * straight over, never both. */
         t = stopped + sustain + 2000;
-        for (int i = 0; i < 10; i++) { pos++; t += 5000; tt_digital_update(&d, pos, t); }
+        for (int i = 0; i < TT_DIGITAL_STEP * 5; i++) {
+            pos++; t += 5000; tt_digital_update(&d, pos, t);
+        }
         int steps_to_flip = 0;
         for (int i = 1; i <= 10; i++) {
             pos--; t += 5000;
@@ -212,9 +216,9 @@ static void test_turntable_digital(void)
     tt_digital_t d = { .sustain_us = TT_LR2_SUSTAIN_US };
     uint64_t t = 900000000000ULL;
     tt_digital_update(&d, 0, t);
-    t += 5000; tt_digital_update(&d, 1, t);
+    for (int32_t p = 1; p < TT_DIGITAL_STEP; p++) { t += 5000; tt_digital_update(&d, p, t); }
     t += 5000;
-    CHECK(tt_digital_update(&d, 2, t) > 0, "registers after about 10 days of uptime");
+    CHECK(tt_digital_update(&d, TT_DIGITAL_STEP, t) > 0, "registers after about 10 days of uptime");
 }
 
 /* ============================================================= */

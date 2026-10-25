@@ -45,7 +45,7 @@ drive that appears.
 To change the mode a fresh board boots in without editing `config.h`:
 
 ```bash
-make build MODE=KEYBOARD
+make build MODE=LR2    # KEYBOARD | LR2 | BEATORAJA | INFINITAS | COMPOSITE
 ```
 
 Once a board is running, use the configurator's "Restart into BOOTSEL"
@@ -70,12 +70,15 @@ unplugging and firmware updates. `DEFAULT_OUTPUT_MODE` in `config.h` (or
 
 | Mode | What the host sees | Turntable |
 |---|---|---|
-| `OUT_KEYBOARD` | NKRO keyboard | Two direction keys |
-| `OUT_GAMEPAD` | 16-button gamepad, X/Y axes | Y axis or two buttons |
-| `OUT_COMPOSITE` | Both, as independent interfaces | Both representations at once |
+| `OUT_BEATORAJA` (default) | 16-button gamepad, X/Y axes | Digital X axis: full scale while spinning, centre when stopped |
+| `OUT_LR2` | Same gamepad | Buttons 10 (CW) and 11 (CCW) |
+| `OUT_INFINITAS` | Same gamepad | Analog X axis: disc position, wrapping every 256 units |
+| `OUT_KEYBOARD` | NKRO keyboard | Q / W keys, digital |
+| `OUT_COMPOSITE` | Keyboard and gamepad, as independent interfaces | Q / W on the keyboard, analog X axis on the gamepad |
 
-Gamepad is the default. Every mode also exposes a CDC serial port, the
-configurator port.
+The three gamepad modes exist because games read the turntable in
+incompatible ways; see [Turntable modes](#turntable-modes). Every mode also
+exposes a CDC serial port, the configurator port.
 
 ## Configurator port
 
@@ -84,8 +87,8 @@ A line protocol over the CDC port, one command per line:
 | Command | Reply |
 |---|---|
 | `info` | `info fw=… mode=… default=… buttons=9 cpr=192 serial=…` |
-| `mode` | `mode gamepad` |
-| `mode keyboard\|gamepad\|composite` | `ok mode …`, plus ` reboot` when it changed |
+| `mode` | `mode beatoraja` |
+| `mode keyboard\|lr2\|beatoraja\|infinitas\|composite` | `ok mode …`, plus ` reboot` when it changed |
 | `stream on\|off` | `ok stream on\|off` |
 | `state` | one `state` line |
 | `identify` | `ok identify`, then every LED blinks for 2 s |
@@ -104,20 +107,47 @@ SEN1), `tt` the quadrature position, and `err` how many quadrature
 transitions were dropped as invalid since boot. Closing the port stops the
 stream. Any serial terminal works too, e.g. `screen /dev/cu.usbmodem* 115200`.
 
-### Turntable representation
+### Turntable modes
 
-`TT_GAMEPAD_STYLE` controls how the turntable appears in gamepad mode.
+Games read a turntable in one of two ways, and a controller that only
+speaks one of them breaks in the others:
 
-`TT_AXIS` (default) maps disc position onto the Y axis, an absolute 8-bit
-value that wraps every revolution. This is what real IIDX hardware does, and games
-read the wrap as continuous motion rather than a jump. Scale it with
-`TT_COUNTS_PER_REV`, which should be 4 × the slot count on your encoder
-disc — quadrature yields four counts per slot.
+- **Analog**: an axis holding the disc position, 0–255, wrapping each way.
+  The official INFINITAS controller reports this on X with Y centred.
+- **Digital**: three states, neutral, clockwise and counter-clockwise.
 
-`TT_DIGITAL` instead emits gamepad buttons 10 and 11, matching keyboard
-behaviour. Use it if a game refuses to bind an axis.
+**LR2** only reads a digital turntable. LR2 mode puts it on buttons 10 and
+11. A direction registers after `TT_DIGITAL_STEP` counts (3.75°) and holds
+for `TT_LR2_SUSTAIN_US` (200 ms, arcin's LR2 setting) after the last step,
+so slow scratches do not flicker into extra hits. A reversal switches
+straight to the other button; both are never held at once.
 
-Keyboard mode always uses the digital representation. A keyboard has no
+**beatoraja** with analog scratch off (its default) reads an axis as a
+pressed scratch only past ±0.9 of full scale. An analog position axis
+therefore "presses" the scratch depending on where the disc happens to
+stop, which is the bug the earlier single gamepad mode had. beatoraja
+mode drives X to full scale while spinning (255 clockwise, 0
+counter-clockwise) and back to centre when the disc stops, using the same
+digital logic with a 100 ms hold (`TT_BEATORAJA_SUSTAIN_US`, DJ DAO's
+default trigger window) so backspin scratch ends release sooner.
+
+**INFINITAS** reads the analog position. IIDX keeps a history of the
+axis and registers a scratch only when it moved at least 2 units against
+its value about two frames (~33 ms) earlier. INFINITAS mode therefore moves
+the axis `TT_ANALOG_UNITS_PER_COUNT` = 2 units per encoder count, so every
+count reaches that threshold and slow scratches register. Because that
+also makes a single count enough, a disc resting on a slot edge could
+flicker ±1 count into phantom scratches; the axis follows a reversal only
+after `TT_ANALOG_REVERSE_COUNTS` of travel. Use this mode for beatoraja too
+if you turn analog scratch on.
+
+The INFINITAS numbers come from community reverse engineering of the
+arcade game, not from Konami. INFINITAS also recognises the official
+controller by its USB VID/PID and then applies its own fixed key layout;
+BitCon keeps its own IDs, so whether INFINITAS accepts it as a generic
+controller is untested.
+
+Keyboard mode uses the digital logic with the LR2 hold. A keyboard has no
 axes.
 
 ## Design notes
@@ -171,13 +201,16 @@ both scratch directions exceeds that, so the keyboard interface uses a
 
 ### Per-mode PIDs
 
-Windows caches HID descriptors against VID/PID. Switching mode under the
+Windows caches HID descriptors against VID/PID. Switching layout under the
 same PID leaves the stale descriptor in place, producing symptoms that look
-like firmware bugs. Each mode therefore reports its own PID, and
-`bcdDevice` is bumped whenever the interface layout changes.
+like firmware bugs. Keyboard, gamepad and composite therefore each report
+their own PID, and `bcdDevice` is bumped whenever the interface layout
+changes. The three gamepad modes share one report descriptor, so they share
+a PID.
 
 The browser treats each PID as a separate device too, so the configurator
-asks you to pick the port once more the first time you use a new mode.
+asks you to pick the port once more the first time you use keyboard,
+gamepad or composite. Switching between gamepad modes keeps the permission.
 
 ### Several controllers
 
@@ -193,9 +226,12 @@ number, so a second controller, or another tab, cannot take its place.
 | Parameter | Default | Adjust when |
 |---|---|---|
 | `DEBOUNCE_US` | 1000 | Chatter appears — raise toward 2000–4000 |
-| `TT_STEP` | 2 | Scratch too twitchy (raise) or too sluggish (lower) |
-| `TT_HOLD_US` | 40000 | Continuous scratch breaks up (raise) or feels laggy (lower) |
-| `TT_COUNTS_PER_REV` | 192 | Must equal 4 × your disc's slot count |
+| `TT_DIGITAL_STEP` | 2 | Digital scratch too twitchy (raise) or too sluggish (lower); 2 is the minimum |
+| `TT_LR2_SUSTAIN_US` | 200000 | LR2 / keyboard: scratch breaks up when slow (raise) or releases late (lower) |
+| `TT_BEATORAJA_SUSTAIN_US` | 100000 | Same, for beatoraja mode |
+| `TT_ANALOG_UNITS_PER_COUNT` | 2 | INFINITAS: slow scratches dropped (raise) or menus scroll too fast (lower) |
+| `TT_ANALOG_REVERSE_COUNTS` | 2 | INFINITAS: phantom scratches at rest (raise) or reversals feel late (lower) |
+| `TT_COUNTS_PER_REV` | 192 | 4 × your disc's slot count; only the configurator uses it |
 
 All of these accept `-D` overrides from the build system, so you can sweep
 values from a script without touching the source.

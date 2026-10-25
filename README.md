@@ -19,9 +19,18 @@ Composed of:
 
 ## Configurator
 
-`configurator/index.html` changes the output mode (GAMEPAD / KEYBOARD /
-COMPOSITE) and shows live input: buttons before and after debounce,
-turntable position, sensor levels, and invalid quadrature steps.
+`configurator/index.html` changes the output mode and shows live input:
+buttons before and after debounce, turntable position, sensor levels, and
+invalid quadrature steps.
+
+Pick the gamepad mode for the game, since each game reads the turntable
+differently:
+
+| Game | Mode |
+|---|---|
+| beatoraja (analog scratch off, the default) | GAMEPAD · beatoraja |
+| LR2 | GAMEPAD · LR2 |
+| INFINITAS, or beatoraja with analog scratch on | GAMEPAD · INFINITAS |
 
 Open the file directly in Chrome or Edge on a desktop (Web Serial is not
 available in Firefox or Safari), plug in the controller, and press Connect.

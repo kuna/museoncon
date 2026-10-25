@@ -16,9 +16,28 @@
  *  Output mode
  * ============================================================= */
 
+/*
+ * Games read the turntable in incompatible ways, so the gamepad comes in
+ * three flavours, one per game family:
+ *
+ *   OUT_LR2       - turntable as two buttons. LR2 only accepts a digital
+ *                   turntable: neutral, clockwise, counter-clockwise.
+ *   OUT_BEATORAJA - turntable as a digital X axis: full scale while the disc
+ *                   spins, centred when it stops. beatoraja's default input
+ *                   path (analog scratch off) treats an axis past +-0.9 as a
+ *                   pressed scratch.
+ *   OUT_INFINITAS - turntable as an analog X axis holding the disc position,
+ *                   wrapping every 256 units, like the official controller.
+ *                   Also suits beatoraja with analog scratch on.
+ *
+ * OUT_INFINITAS keeps the value the single gamepad mode used to have, so a
+ * board that stored "gamepad" keeps the same behaviour.
+ */
 #define OUT_KEYBOARD   1  /* NKRO keyboard only                        */
-#define OUT_GAMEPAD    2  /* Gamepad only                              */
-#define OUT_COMPOSITE  3  /* Both, as two independent HID interfaces   */
+#define OUT_INFINITAS  2  /* Gamepad, analog turntable axis            */
+#define OUT_COMPOSITE  3  /* Keyboard + INFINITAS-style gamepad        */
+#define OUT_LR2        4  /* Gamepad, turntable as two buttons         */
+#define OUT_BEATORAJA  5  /* Gamepad, digital turntable axis           */
 
 /*
  * The output mode is a runtime setting: the configurator page changes it
@@ -30,24 +49,7 @@
  * you prefer not to edit this file.
  */
 #ifndef DEFAULT_OUTPUT_MODE
-#define DEFAULT_OUTPUT_MODE  OUT_GAMEPAD
-#endif
-
-/*
- * How the turntable is represented in gamepad mode.
- *
- *   TT_AXIS    - absolute wrapping 8-bit Y axis. This is what real IIDX
- *                controllers do, and what most rhythm games expect.
- *   TT_DIGITAL - two direction buttons, same behaviour as keyboard mode.
- *
- * Keyboard mode always uses the digital representation; a keyboard has
- * no axes.
- */
-#define TT_AXIS        1
-#define TT_DIGITAL     2
-
-#ifndef TT_GAMEPAD_STYLE
-#define TT_GAMEPAD_STYLE  TT_AXIS
+#define DEFAULT_OUTPUT_MODE  OUT_BEATORAJA
 #endif
 
 /* =============================================================
@@ -119,8 +121,8 @@
 }
 
 /*
- * Gamepad mode: buttons 1..9 map straight through to gamepad buttons 1..9.
- * When TT_GAMEPAD_STYLE is TT_DIGITAL the turntable adds buttons 10 and 11.
+ * Gamepad modes: buttons 1..9 map straight through to gamepad buttons 1..9.
+ * In LR2 mode the turntable adds buttons 10 (clockwise) and 11.
  * The descriptor declares 16 buttons, so there is room to grow.
  */
 #define GAMEPAD_BUTTON_COUNT 16
@@ -177,22 +179,54 @@
 #endif
 
 /*
- * Quadrature counts required to emit one turntable direction event.
- * Acts as hysteresis: jitter smaller than this never produces a keypress.
- * Used by keyboard mode and by TT_DIGITAL gamepad mode.
+ * Digital turntable: LR2 and beatoraja modes, and the keyboard's Q / W.
+ *
+ * A direction registers once the disc has moved TT_DIGITAL_STEP counts, and
+ * stays held while it keeps moving at least that far per sustain window. It
+ * releases one window after the last step, so creep slower than one step
+ * per window never registers and +-1 count jitter never does either.
+ * Reversing switches straight to the other direction; both are never held
+ * at once.
+ *
+ * LR2 uses arcin's 200 ms, which fixed LR2 misfires on full-size
+ * turntables. beatoraja uses DJ DAO's default 100 ms trigger window, which
+ * releases sooner for backspin scratch ends. The keyboard follows LR2.
  */
-#ifndef TT_STEP
-#define TT_STEP 2
+#ifndef TT_DIGITAL_STEP
+#define TT_DIGITAL_STEP 2                /* of 192 counts: 3.75 degrees */
 #endif
 
-/* How long a turntable direction key stays held after an event. */
-#ifndef TT_HOLD_US
-#define TT_HOLD_US 40000  /* 40 ms */
+#ifndef TT_LR2_SUSTAIN_US
+#define TT_LR2_SUSTAIN_US 200000
+#endif
+
+#ifndef TT_BEATORAJA_SUSTAIN_US
+#define TT_BEATORAJA_SUSTAIN_US 100000
 #endif
 
 /*
- * Quadrature counts per full revolution of the encoder disc, used to scale
- * the gamepad axis so that one physical spin is one full 0-255 sweep.
+ * Analog turntable: INFINITAS and composite modes.
+ *
+ * The X axis carries the disc position and wraps every 256 units. IIDX
+ * registers a scratch only when the axis moved at least 2 units against
+ * its value about two frames (~33 ms) earlier, so 2 units per count lets
+ * every encoder count reach that threshold and keeps slow scratches alive.
+ *
+ * Reversals must travel TT_ANALOG_REVERSE_COUNTS before the axis follows.
+ * Without this, a disc resting on a slot edge flickers +-1 count, which at
+ * 2 units per count reads as a scratch.
+ */
+#ifndef TT_ANALOG_UNITS_PER_COUNT
+#define TT_ANALOG_UNITS_PER_COUNT 2
+#endif
+
+#ifndef TT_ANALOG_REVERSE_COUNTS
+#define TT_ANALOG_REVERSE_COUNTS 2
+#endif
+
+/*
+ * Quadrature counts per full revolution of the encoder disc. Only the
+ * configurator uses it, to draw the disc and count turns.
  *
  * Set this to 4 x (number of slots on the disc). Quadrature gives four
  * counts per slot: two edges per channel, two channels.
@@ -205,14 +239,12 @@
  *  Derived - do not edit below this line
  * ============================================================= */
 
-#if (DEFAULT_OUTPUT_MODE != OUT_KEYBOARD) && \
-    (DEFAULT_OUTPUT_MODE != OUT_GAMEPAD) && \
-    (DEFAULT_OUTPUT_MODE != OUT_COMPOSITE)
-  #error "DEFAULT_OUTPUT_MODE must be OUT_KEYBOARD, OUT_GAMEPAD or OUT_COMPOSITE"
+#if (DEFAULT_OUTPUT_MODE < OUT_KEYBOARD) || (DEFAULT_OUTPUT_MODE > OUT_BEATORAJA)
+  #error "DEFAULT_OUTPUT_MODE must be one of the OUT_* modes"
 #endif
 
-#if (TT_GAMEPAD_STYLE != TT_AXIS) && (TT_GAMEPAD_STYLE != TT_DIGITAL)
-  #error "TT_GAMEPAD_STYLE must be TT_AXIS or TT_DIGITAL"
+#if TT_DIGITAL_STEP < 2
+  #error "TT_DIGITAL_STEP below 2 lets +-1 count jitter register as a scratch"
 #endif
 
 #if TT_COUNTS_PER_REV < 4

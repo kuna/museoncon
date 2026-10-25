@@ -13,11 +13,19 @@
 #include <stdbool.h>
 #include <string.h>
 
-#define DEBOUNCE_US        1000
-#define TT_STEP            2
-#define TT_HOLD_US         40000
-#define TT_COUNTS_PER_REV  (4 * 48)
-#define NUM_BTN            9
+#define DEBOUNCE_US                1000
+#define TT_DIGITAL_STEP            2
+#define TT_LR2_SUSTAIN_US          200000
+#define TT_BEATORAJA_SUSTAIN_US    100000
+#define TT_ANALOG_UNITS_PER_COUNT  2
+#define TT_ANALOG_REVERSE_COUNTS   2
+#define NUM_BTN                    9
+#define KEY_CW_BIT                 (NUM_BTN + 0)
+#define KEY_CCW_BIT                (NUM_BTN + 1)
+
+#define OUT_INFINITAS  2
+#define OUT_LR2        4
+#define OUT_BEATORAJA  5
 
 static int failures = 0;
 
@@ -106,86 +114,177 @@ static void test_quadrature(void)
 
 /* ============================================================= */
 
-static void test_turntable_events(void)
+/* Mirrors tt_digital_update() in main.c. */
+typedef struct {
+    uint64_t sustain_us;
+    int32_t  ref;
+    uint64_t ref_at;
+    uint64_t release_at;
+    int8_t   dir;
+} tt_digital_t;
+
+static int8_t tt_digital_update(tt_digital_t *d, int32_t pos, uint64_t now_us)
 {
-    printf("turntable direction events\n");
+    const int32_t delta = pos - d->ref;
 
-    int32_t  pos = 0, ref = 0;
-    uint64_t hold[2] = { 0, 0 };
-    uint64_t t = 100000;
-    int cw = 0, ccw = 0;
-
-    for (int i = 0; i < 12; i++) {
-        pos += 1;
-        int32_t d = pos - ref;
-        if (d >= TT_STEP)       { ref += TT_STEP; hold[0] = t + TT_HOLD_US; cw++;  }
-        else if (d <= -TT_STEP) { ref -= TT_STEP; hold[1] = t + TT_HOLD_US; ccw++; }
-        t += 500;
+    if (delta >= TT_DIGITAL_STEP || delta <= -TT_DIGITAL_STEP) {
+        d->dir        = (delta > 0) ? 1 : -1;
+        d->ref        = pos;
+        d->ref_at     = now_us;
+        d->release_at = now_us + d->sustain_us;
+    } else if (now_us - d->ref_at >= d->sustain_us) {
+        d->ref    = pos;
+        d->ref_at = now_us;
     }
-    CHECK(cw == 6,  "12 forward counts emit 6 CW events at TT_STEP=2");
-    CHECK(ccw == 0, "forward motion emits no CCW events");
 
-    CHECK(hold[0] > t, "key is held while the hold window is open");
-    t += TT_HOLD_US + 1000;
-    CHECK(!(hold[0] > t), "key releases after the hold window expires");
+    if (now_us >= d->release_at) d->dir = 0;
+    return d->dir;
+}
 
-    /* Hysteresis: alternating +-1 must never cross the threshold. */
-    pos = 0; ref = 0; cw = 0; ccw = 0;
-    for (int i = 0; i < 20; i++) {
-        pos += (i % 2) ? -1 : +1;
-        int32_t d = pos - ref;
-        if (d >= TT_STEP)       { ref += TT_STEP; cw++;  }
-        else if (d <= -TT_STEP) { ref -= TT_STEP; ccw++; }
+static void test_turntable_digital(void)
+{
+    printf("digital turntable (LR2, beatoraja, keyboard)\n");
+
+    const uint64_t sustains[2] = { TT_LR2_SUSTAIN_US, TT_BEATORAJA_SUSTAIN_US };
+
+    for (int m = 0; m < 2; m++) {
+        const uint64_t sustain = sustains[m];
+        tt_digital_t d = { .sustain_us = sustain };
+        uint64_t t = 5000000;  /* 5 s after boot */
+        int32_t pos = 0;
+
+        /* The firmware polls continuously, so it has anchored at rest. */
+        tt_digital_update(&d, pos, t);
+
+        /* Spin forward one count every 5 ms (about 1 rev/s). */
+        int first_cw = -1, saw_ccw = 0, gaps = 0;
+        for (int i = 1; i <= 100; i++) {
+            pos++; t += 5000;
+            int8_t dir = tt_digital_update(&d, pos, t);
+            if (dir > 0 && first_cw < 0) first_cw = i;
+            if (dir < 0) saw_ccw = 1;
+            if (first_cw > 0 && dir == 0) gaps++;
+        }
+        CHECK(first_cw == TT_DIGITAL_STEP, "clockwise registers after one step of travel");
+        CHECK(!saw_ccw, "forward spin never reads as counter-clockwise");
+        CHECK(gaps == 0, "a steady spin holds without flicker");
+
+        /* Stop: held until one sustain window after the last step, which
+         * came at most one step (10 ms here) before the disc stopped. */
+        uint64_t stopped = t;
+        int8_t dir = tt_digital_update(&d, pos, stopped + sustain - 10000);
+        CHECK(dir > 0, "direction is still held just inside the sustain window");
+        dir = tt_digital_update(&d, pos, stopped + sustain + 1000);
+        CHECK(dir == 0, "direction releases once the sustain window passes");
+
+        /* Spin again, then reverse: switches straight over, never both. */
+        t = stopped + sustain + 2000;
+        for (int i = 0; i < 10; i++) { pos++; t += 5000; tt_digital_update(&d, pos, t); }
+        int steps_to_flip = 0;
+        for (int i = 1; i <= 10; i++) {
+            pos--; t += 5000;
+            if (tt_digital_update(&d, pos, t) < 0) { steps_to_flip = i; break; }
+        }
+        CHECK(steps_to_flip == TT_DIGITAL_STEP, "a reversal flips direction after one step back");
+
+        /* Slot-edge jitter at rest never registers. */
+        tt_digital_t j = { .sustain_us = sustain };
+        int jitter_fired = 0;
+        t += 1000000;
+        for (int i = 0; i < 1000; i++) {
+            t += 1000;
+            if (tt_digital_update(&j, (i % 2) ? 1 : 0, t) != 0) jitter_fired = 1;
+        }
+        CHECK(!jitter_fired, "+-1 count jitter never registers");
+
+        /* Creep slower than one step per window never registers. */
+        tt_digital_t c = { .sustain_us = sustain };
+        int crept = 0;
+        int32_t cpos = 0;
+        for (int i = 0; i < 50; i++) {
+            cpos++; t += sustain + sustain / 2;
+            if (tt_digital_update(&c, cpos, t) != 0) crept = 1;
+        }
+        CHECK(!crept, "creep below one step per window never registers");
     }
-    CHECK(cw == 0 && ccw == 0, "+-1 jitter emits no events");
+
+    /* Long uptime: timestamps far past 2^32 microseconds still work. */
+    tt_digital_t d = { .sustain_us = TT_LR2_SUSTAIN_US };
+    uint64_t t = 900000000000ULL;
+    tt_digital_update(&d, 0, t);
+    t += 5000; tt_digital_update(&d, 1, t);
+    t += 5000;
+    CHECK(tt_digital_update(&d, 2, t) > 0, "registers after about 10 days of uptime");
 }
 
 /* ============================================================= */
 
-static uint8_t axis_from(int32_t tt_pos)
+/* Mirrors tt_analog_update() in main.c. */
+typedef struct {
+    int32_t pos;
+    int8_t  dir;
+} tt_analog_t;
+
+static void tt_analog_update(tt_analog_t *a, int32_t pos)
 {
-    int32_t p = tt_pos % TT_COUNTS_PER_REV;
-    if (p < 0) p += TT_COUNTS_PER_REV;
-    return (uint8_t)((p * 256) / TT_COUNTS_PER_REV);
+    const int32_t delta = pos - a->pos;
+    if (delta == 0) return;
+
+    const int8_t dir = (delta > 0) ? 1 : -1;
+    if (dir == a->dir || delta >= TT_ANALOG_REVERSE_COUNTS ||
+        delta <= -TT_ANALOG_REVERSE_COUNTS) {
+        a->pos = pos;
+        a->dir = dir;
+    }
 }
 
-static void test_turntable_axis(void)
+static uint8_t analog_axis(int32_t pos)
 {
-    printf("turntable axis mapping\n");
+    return (uint8_t)(pos * TT_ANALOG_UNITS_PER_COUNT);
+}
 
-    CHECK(axis_from(0) == 0, "origin maps to 0");
-    CHECK(axis_from(TT_COUNTS_PER_REV) == 0, "one revolution wraps to 0");
-    CHECK(axis_from(TT_COUNTS_PER_REV / 2) == 128, "half revolution maps to 128");
-    CHECK(axis_from(TT_COUNTS_PER_REV * 7) == 0, "many revolutions still wrap to 0");
+static void test_turntable_analog(void)
+{
+    printf("analog turntable (INFINITAS, composite)\n");
 
-    /* Negative positions must wrap into range, not clamp or go wild. */
-    CHECK(axis_from(-1) == axis_from(TT_COUNTS_PER_REV - 1),
-          "negative position wraps to the top of the range");
-    CHECK(axis_from(-TT_COUNTS_PER_REV) == 0, "one reverse revolution wraps to 0");
-    CHECK(axis_from(-TT_COUNTS_PER_REV / 2) == 128,
-          "half reverse revolution maps to 128");
+    tt_analog_t a = { 0 };
 
-    /* Output must stay inside 0-255 for a wide sweep of inputs. */
-    for (int32_t p = -100000; p <= 100000; p += 37) {
-        uint8_t a = axis_from(p);
-        (void)a;  /* uint8_t cannot exceed 255; the real check is no crash/UB */
+    /* Forward motion is followed count for count once moving. */
+    tt_analog_update(&a, 2);
+    CHECK(a.pos == 2, "the first move of two counts is followed");
+    int every_count_moves_two = 1;
+    for (int32_t p = 3; p < 40; p++) {
+        uint8_t before = analog_axis(a.pos);
+        tt_analog_update(&a, p);
+        if ((uint8_t)(analog_axis(a.pos) - before) != 2) every_count_moves_two = 0;
     }
+    CHECK(every_count_moves_two,
+          "every count moves the axis 2 units, IIDX's minimum scratch step");
 
-    /* Monotonic within one revolution. */
-    bool monotonic = true;
-    int prev = -1;
-    for (int32_t p = 0; p < TT_COUNTS_PER_REV; p++) {
-        int a = axis_from(p);
-        if (a < prev) { monotonic = false; break; }
-        prev = a;
+    /* Resting on a slot edge: +-1 jitter leaves the axis alone. */
+    int32_t rest = a.pos;
+    int moved = 0;
+    for (int i = 0; i < 100; i++) {
+        tt_analog_update(&a, rest - 1);
+        if (a.pos != rest) moved = 1;
+        tt_analog_update(&a, rest);
     }
-    CHECK(monotonic, "axis rises monotonically across one revolution");
+    CHECK(!moved, "+-1 count jitter against the direction never moves the axis");
 
-    /* Forward motion across the wrap point must step by 1, not jump. */
-    int before = axis_from(TT_COUNTS_PER_REV - 1);
-    int after  = axis_from(TT_COUNTS_PER_REV);
-    CHECK(before == 255 || before == 254, "position just before wrap is near 255");
-    CHECK(after == 0, "position at wrap returns to 0");
+    /* A real reversal is followed after two counts back. */
+    tt_analog_update(&a, rest - 1);
+    CHECK(a.pos == rest, "one count back is held");
+    tt_analog_update(&a, rest - 2);
+    CHECK(a.pos == rest - 2 && a.dir < 0, "two counts back follows the reversal");
+
+    /* Wrapping: modulo 256 in both directions. */
+    CHECK(analog_axis(0) == 0, "origin is 0");
+    CHECK(analog_axis(127) == 254, "127 counts is 254 units");
+    CHECK(analog_axis(128) == 0, "128 counts wraps to 0");
+    CHECK(analog_axis(-1) == 254, "one count below origin wraps to 254");
+    CHECK(analog_axis(-128) == 0, "128 counts below origin wraps to 0");
+    CHECK((uint8_t)(analog_axis(-1) - analog_axis(0)) == 254,
+          "the wrap reads as -2 units in 8-bit arithmetic, not a jump");
 }
 
 /* ============================================================= */
@@ -238,9 +337,9 @@ static void test_debounce(void)
     }
 
     uint64_t now  = marks[1];
-    uint64_t hold = now + TT_HOLD_US;
+    uint64_t hold = now + TT_LR2_SUSTAIN_US;
     CHECK(hold > now, "an open hold reads as held");
-    CHECK(!(hold > now + TT_HOLD_US + 1), "the hold releases once past its deadline");
+    CHECK(!(hold > now + TT_LR2_SUSTAIN_US + 1), "the hold releases once past its deadline");
 }
 
 /* ============================================================= */
@@ -295,37 +394,71 @@ typedef struct __attribute__((packed)) {
     uint8_t  y;
 } gamepad_report_t;
 
+/* Mirrors gamepad_task() in main.c. */
+static gamepad_report_t make_gamepad(uint8_t mode, uint32_t state, int32_t axis_pos)
+{
+    const int cw  = (state & (1u << KEY_CW_BIT))  != 0;
+    const int ccw = (state & (1u << KEY_CCW_BIT)) != 0;
+
+    gamepad_report_t r = {
+        .buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u)),
+        .x = 128,
+        .y = 128,
+    };
+
+    switch (mode) {
+    case OUT_LR2:
+        if (cw)  r.buttons |= (1u << (NUM_BTN + 0));
+        if (ccw) r.buttons |= (1u << (NUM_BTN + 1));
+        break;
+    case OUT_BEATORAJA:
+        if (cw)  r.x = 255;
+        if (ccw) r.x = 0;
+        break;
+    default:
+        r.x = analog_axis(axis_pos);
+        break;
+    }
+    return r;
+}
+
 static void test_gamepad_report(void)
 {
-    printf("gamepad report packing\n");
+    printf("gamepad report packing, per mode\n");
 
     CHECK(sizeof(gamepad_report_t) == 4, "report is exactly 4 bytes");
 
-    uint32_t state = (1u << 0) | (1u << 8);  /* buttons 1 and 9 */
+    const uint32_t btns = (1u << 0) | (1u << 8);  /* buttons 1 and 9 */
+    const uint32_t cw   = 1u << KEY_CW_BIT;
+    const uint32_t ccw  = 1u << KEY_CCW_BIT;
+    const uint8_t modes[3] = { OUT_LR2, OUT_BEATORAJA, OUT_INFINITAS };
 
-    gamepad_report_t r;
-    r.buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
-    r.x = 128;
-    r.y = axis_from(TT_COUNTS_PER_REV / 4);
+    for (int m = 0; m < 3; m++) {
+        gamepad_report_t r = make_gamepad(modes[m], btns | cw, 0);
+        CHECK((r.buttons & 0x1FF) == btns, "buttons 1-9 map straight through");
+        CHECK(r.y == 128, "Y stays centred");
+    }
 
-    CHECK((r.buttons & (1u << 0)) != 0, "button 1 set");
-    CHECK((r.buttons & (1u << 8)) != 0, "button 9 set");
-    CHECK((r.buttons & (1u << 4)) == 0, "button 5 clear");
-    CHECK(r.y == 64, "quarter revolution maps to 64 on Y");
-    CHECK(r.x == 128, "X stays centred");
+    gamepad_report_t r = make_gamepad(OUT_LR2, cw, 50);
+    CHECK(r.buttons == (1u << 9) && r.x == 128, "LR2: clockwise is button 10, axes centred");
+    r = make_gamepad(OUT_LR2, ccw, 50);
+    CHECK(r.buttons == (1u << 10), "LR2: counter-clockwise is button 11");
 
-    /* Button field must not leak the turntable bits in axis mode. */
-    state = 0xFFFFFFFFu;
-    uint16_t masked = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
-    CHECK(masked == 0x1FF, "only the nine button bits survive masking");
+    r = make_gamepad(OUT_BEATORAJA, cw, 50);
+    CHECK(r.x == 255 && r.buttons == 0, "beatoraja: clockwise is X full scale, no buttons");
+    r = make_gamepad(OUT_BEATORAJA, ccw, 50);
+    CHECK(r.x == 0, "beatoraja: counter-clockwise is X minimum");
+    r = make_gamepad(OUT_BEATORAJA, 0, 50);
+    CHECK(r.x == 128, "beatoraja: idle is centred");
+    /* beatoraja normalises 0..255 to -1..1 and needs |value| > 0.9. */
+    CHECK((255 / 127.5 - 1.0) > 0.9 && (0 / 127.5 - 1.0) < -0.9,
+          "beatoraja: full scale clears the 0.9 threshold both ways");
+    CHECK((128 / 127.5 - 1.0) < 0.9, "beatoraja: centre stays below the threshold");
 
-    /* Digital turntable style adds buttons 10 and 11. */
-    state = (1u << 9) | (1u << 10);
-    uint16_t btns = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
-    if (state & (1u << 9))  btns |= (1u << (NUM_BTN + 0));
-    if (state & (1u << 10)) btns |= (1u << (NUM_BTN + 1));
-    CHECK(btns == ((1u << 9) | (1u << 10)),
-          "digital turntable lands on gamepad buttons 10 and 11");
+    r = make_gamepad(OUT_INFINITAS, cw, 50);
+    CHECK(r.x == 100 && r.buttons == 0, "INFINITAS: X is the position, no turntable buttons");
+    r = make_gamepad(OUT_INFINITAS, 0, -1);
+    CHECK(r.x == 254, "INFINITAS: negative positions wrap");
 }
 
 /* ============================================================= */
@@ -333,8 +466,8 @@ static void test_gamepad_report(void)
 int main(void)
 {
     test_quadrature();
-    test_turntable_events();
-    test_turntable_axis();
+    test_turntable_digital();
+    test_turntable_analog();
     test_debounce();
     test_keyboard_report();
     test_gamepad_report();

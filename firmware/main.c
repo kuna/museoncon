@@ -48,6 +48,9 @@ static volatile uint32_t g_key_state = 0;
 /* Accumulated quadrature position. Written by core1. */
 static volatile int32_t g_tt_pos = 0;
 
+/* Turntable position for the analog axis, jitter filtered. Written by core1. */
+static volatile int32_t g_tt_axis = 0;
+
 /* Button pins before debounce, bit i = button i+1. Written by core1. */
 static volatile uint32_t g_raw_state = 0;
 
@@ -141,6 +144,68 @@ static void gpio_setup(void)
 }
 
 /* =============================================================
+ *  Turntable algorithms
+ * ============================================================= */
+
+/*
+ * Digital turntable for LR2 and beatoraja modes and the keyboard. A
+ * direction needs TT_DIGITAL_STEP counts of travel within one sustain
+ * window to register, and releases one window after the last step. See
+ * config.h for where the numbers come from.
+ */
+typedef struct {
+    uint64_t sustain_us;
+    int32_t  ref;         /* position the next step is measured from */
+    uint64_t ref_at;      /* when ref was taken                      */
+    uint64_t release_at;  /* the direction drops to idle after this  */
+    int8_t   dir;         /* +1 clockwise, -1 counter-clockwise, 0   */
+} tt_digital_t;
+
+static int8_t tt_digital_update(tt_digital_t *d, int32_t pos, uint64_t now_us)
+{
+    const int32_t delta = pos - d->ref;
+
+    if (delta >= TT_DIGITAL_STEP || delta <= -TT_DIGITAL_STEP) {
+        /* A reversal lands here too, replacing the old direction outright. */
+        d->dir        = (delta > 0) ? 1 : -1;
+        d->ref        = pos;
+        d->ref_at     = now_us;
+        d->release_at = now_us + d->sustain_us;
+    } else if (now_us - d->ref_at >= d->sustain_us) {
+        /* Too slow to count as spinning: forget the partial travel. */
+        d->ref    = pos;
+        d->ref_at = now_us;
+    }
+
+    if (now_us >= d->release_at) d->dir = 0;
+    return d->dir;
+}
+
+/*
+ * Analog turntable position for INFINITAS and composite modes. It follows
+ * the disc at once in its current direction, but follows a reversal only
+ * after TT_ANALOG_REVERSE_COUNTS of travel, so slot-edge jitter never moves
+ * the axis.
+ */
+typedef struct {
+    int32_t pos;
+    int8_t  dir;
+} tt_analog_t;
+
+static void tt_analog_update(tt_analog_t *a, int32_t pos)
+{
+    const int32_t delta = pos - a->pos;
+    if (delta == 0) return;
+
+    const int8_t dir = (delta > 0) ? 1 : -1;
+    if (dir == a->dir || delta >= TT_ANALOG_REVERSE_COUNTS ||
+        delta <= -TT_ANALOG_REVERSE_COUNTS) {
+        a->pos = pos;
+        a->dir = dir;
+    }
+}
+
+/* =============================================================
  *  core1 - input scan
  * ============================================================= */
 
@@ -164,9 +229,13 @@ static void core1_main(void)
     bool     btn_state[NUM_BTN]  = { false };
 
     int32_t  tt_pos = 0;              /* accumulated position            */
-    int32_t  tt_ref = 0;              /* position at last emitted event  */
-    uint64_t tt_hold[2] = { 0, 0 };   /* [0] = CW, [1] = CCW             */
     uint32_t tt_errors = 0;           /* invalid transitions             */
+
+    tt_digital_t tt_digital = {
+        .sustain_us = settings_mode() == OUT_BEATORAJA ? TT_BEATORAJA_SUSTAIN_US
+                                                       : TT_LR2_SUSTAIN_US,
+    };
+    tt_analog_t tt_analog = { 0 };
 
     uint32_t identify_seen  = g_identify_req;
     uint64_t identify_until = 0;
@@ -218,26 +287,16 @@ static void core1_main(void)
             q_prev  = q;
         }
 
-        /*
-         * Emit a direction event once accumulated travel exceeds TT_STEP,
-         * then advance the reference by that much. The gap between tt_pos
-         * and tt_ref acts as hysteresis, so a disc resting on a boundary
-         * cannot rattle both directions at once.
-         */
-        const int32_t delta = tt_pos - tt_ref;
-        if (delta >= TT_STEP) {
-            tt_ref    += TT_STEP;
-            tt_hold[0] = now_us + TT_HOLD_US;
-        } else if (delta <= -TT_STEP) {
-            tt_ref    -= TT_STEP;
-            tt_hold[1] = now_us + TT_HOLD_US;
-        }
+        /* Both are always computed; each mode reports the one it needs. */
+        const int8_t tt_dir = tt_digital_update(&tt_digital, tt_pos, now_us);
+        if (tt_dir > 0) keys |= (1u << KEY_CW_BIT);
+        if (tt_dir < 0) keys |= (1u << KEY_CCW_BIT);
 
-        if (tt_hold[0] > now_us) keys |= (1u << KEY_CW_BIT);
-        if (tt_hold[1] > now_us) keys |= (1u << KEY_CCW_BIT);
+        tt_analog_update(&tt_analog, tt_pos);
 
         g_key_state = keys;
         g_tt_pos    = tt_pos;
+        g_tt_axis   = tt_analog.pos;
         g_raw_state = raw_bits;
         g_sen_state = q;
         g_tt_errors = tt_errors;
@@ -288,47 +347,47 @@ static void keyboard_task(uint8_t instance)
 
 typedef struct __attribute__((packed)) {
     uint16_t buttons;  /* 16 buttons, bit 0 = button 1 */
-    uint8_t  x;        /* unused, held centred */
-    uint8_t  y;        /* turntable */
+    uint8_t  x;        /* turntable, except in LR2 mode */
+    uint8_t  y;        /* unused, held centred */
 } gamepad_report_t;
 
-#if TT_GAMEPAD_STYLE == TT_AXIS
-/*
- * Absolute wrapping axis. The disc position maps onto 0-255 and rolls over
- * at each revolution, which is how real IIDX hardware reports the turntable.
- * Games read the wrap as continuous motion rather than as a jump.
- */
-static uint8_t turntable_axis(void)
-{
-    int32_t p = g_tt_pos % TT_COUNTS_PER_REV;
-    if (p < 0) p += TT_COUNTS_PER_REV;
-    return (uint8_t)((p * 256) / TT_COUNTS_PER_REV);
-}
-#endif
+#define AXIS_CENTRE 128
 
-static void gamepad_task(uint8_t instance)
+static void gamepad_task(uint8_t instance, uint8_t mode)
 {
     if (!tud_hid_n_ready(instance)) return;
 
     const uint32_t state = g_key_state;
-
-    gamepad_report_t report;
-    report.buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u));
-
-#if TT_GAMEPAD_STYLE == TT_AXIS
-    report.y = turntable_axis();
-#else
-    if (state & (1u << KEY_CW_BIT))  report.buttons |= (1u << (NUM_BTN + 0));
-    if (state & (1u << KEY_CCW_BIT)) report.buttons |= (1u << (NUM_BTN + 1));
-    report.y = 128;
-#endif
+    const bool     cw    = (state & (1u << KEY_CW_BIT))  != 0;
+    const bool     ccw   = (state & (1u << KEY_CCW_BIT)) != 0;
 
     /*
-     * X is present but fixed at centre. Some DirectInput drivers refuse to
+     * Y is present but fixed at centre. Some DirectInput drivers refuse to
      * enumerate a controller that declares only one axis, so the cost of a
      * spare byte buys broad compatibility.
      */
-    report.x = 128;
+    gamepad_report_t report = {
+        .buttons = (uint16_t)(state & ((1u << NUM_BTN) - 1u)),
+        .x       = AXIS_CENTRE,
+        .y       = AXIS_CENTRE,
+    };
+
+    switch (mode) {
+    case OUT_LR2:
+        if (cw)  report.buttons |= (1u << (NUM_BTN + 0));
+        if (ccw) report.buttons |= (1u << (NUM_BTN + 1));
+        break;
+    case OUT_BEATORAJA:
+        /* Full scale reads as +-1.0, past beatoraja's 0.9 threshold. */
+        if (cw)  report.x = 255;
+        if (ccw) report.x = 0;
+        break;
+    default:
+        /* INFINITAS and composite. Converting to uint8_t is modulo 256,
+         * negative positions included, which gives the wrap for free. */
+        report.x = (uint8_t)(g_tt_axis * TT_ANALOG_UNITS_PER_COUNT);
+        break;
+    }
 
     static gamepad_report_t prev;
     static bool             primed = false;
@@ -360,9 +419,9 @@ static void gamepad_task(uint8_t instance)
  *   bootsel        -> ok bootsel           reboots into the UF2 bootloader
  *   anything else  -> err <reason>
  *
- * <m> is keyboard, gamepad or composite. While streaming, a state line goes
- * out whenever the input changes, at most every STREAM_MIN_US and at least
- * every STREAM_IDLE_US:
+ * <m> is keyboard, lr2, beatoraja, infinitas or composite. While streaming,
+ * a state line goes out whenever the input changes, at most every
+ * STREAM_MIN_US and at least every STREAM_IDLE_US:
  *
  *   state keys=<hex> raw=<hex> sen=<0-3> tt=<int> err=<uint>
  *
@@ -599,14 +658,15 @@ int main(void)
 
     multicore_launch_core1(core1_main);
 
-    const int keyboard = usb_hid_keyboard_instance();
-    const int gamepad  = usb_hid_gamepad_instance();
+    const uint8_t mode     = settings_mode();
+    const int     keyboard = usb_hid_keyboard_instance();
+    const int     gamepad  = usb_hid_gamepad_instance();
 
     while (true) {
         tud_task();
 
         if (keyboard >= 0) keyboard_task((uint8_t)keyboard);
-        if (gamepad  >= 0) gamepad_task((uint8_t)gamepad);
+        if (gamepad  >= 0) gamepad_task((uint8_t)gamepad, mode);
 
         config_port_task();
     }

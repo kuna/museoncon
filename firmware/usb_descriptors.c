@@ -23,20 +23,22 @@
 #define USB_VID 0xCAFE  /* Placeholder. Get a real VID/PID before distributing. */
 
 /*
- * Each output mode gets its own PID.
+ * Each USB layout gets its own PID.
  *
- * Windows caches HID descriptors against VID/PID. Switching mode while
+ * Windows caches HID descriptors against VID/PID. Switching layout while
  * keeping the same PID leaves the stale descriptor in place and the device
  * misbehaves in ways that look like a firmware bug. Separate PIDs make a
- * mode change look like a different device, which it effectively is.
+ * layout change look like a different device, which it effectively is.
+ *
+ * The three gamepad modes share one report descriptor and differ only in
+ * which fields carry the turntable, so they share a PID.
  */
 static uint16_t usb_pid(void)
 {
-    switch (settings_mode()) {
-    case OUT_KEYBOARD: return 0xB170;
-    case OUT_GAMEPAD:  return 0xB171;
-    default:           return 0xB172;
-    }
+    const uint8_t mode = settings_mode();
+    if (mode == OUT_KEYBOARD) return 0xB170;
+    if (settings_mode_is_gamepad(mode)) return 0xB171;
+    return 0xB172;
 }
 
 static tusb_desc_device_t desc_device = {
@@ -96,8 +98,9 @@ static uint8_t const desc_hid_keyboard[] = {
 /*
  * Gamepad: 16 buttons plus X and Y, packed into 4 bytes.
  *
- * Y carries the turntable. X is declared but held centred - some
- * DirectInput drivers will not enumerate a single-axis controller.
+ * X carries the turntable in beatoraja and INFINITAS modes, matching the
+ * official controller. Y is declared but held centred - some DirectInput
+ * drivers will not enumerate a single-axis controller.
  */
 static uint8_t const desc_hid_gamepad[] = {
     0x05, 0x01,        /* Usage Page (Generic Desktop)     */
@@ -131,16 +134,14 @@ static uint8_t const desc_hid_gamepad[] = {
  */
 int usb_hid_keyboard_instance(void)
 {
-    return settings_mode() == OUT_GAMEPAD ? -1 : 0;
+    return settings_mode_is_gamepad(settings_mode()) ? -1 : 0;
 }
 
 int usb_hid_gamepad_instance(void)
 {
-    switch (settings_mode()) {
-    case OUT_GAMEPAD:   return 0;
-    case OUT_COMPOSITE: return 1;
-    default:            return -1;
-    }
+    const uint8_t mode = settings_mode();
+    if (settings_mode_is_gamepad(mode)) return 0;
+    return mode == OUT_COMPOSITE ? 1 : -1;
 }
 
 uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance)
@@ -209,11 +210,10 @@ static uint8_t const desc_config_composite[] = {
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index)
 {
     (void)index;
-    switch (settings_mode()) {
-    case OUT_KEYBOARD: return desc_config_keyboard;
-    case OUT_GAMEPAD:  return desc_config_gamepad;
-    default:           return desc_config_composite;
-    }
+    const uint8_t mode = settings_mode();
+    if (mode == OUT_KEYBOARD) return desc_config_keyboard;
+    if (settings_mode_is_gamepad(mode)) return desc_config_gamepad;
+    return desc_config_composite;
 }
 
 /* =============================================================
@@ -225,9 +225,11 @@ static char serial_str[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
 static char const *product_str(void)
 {
     switch (settings_mode()) {
-    case OUT_KEYBOARD: return "BitCon (keyboard)";
-    case OUT_GAMEPAD:  return "BitCon (gamepad)";
-    default:           return "BitCon (composite)";
+    case OUT_KEYBOARD:  return "BitCon (keyboard)";
+    case OUT_LR2:       return "BitCon (LR2)";
+    case OUT_BEATORAJA: return "BitCon (beatoraja)";
+    case OUT_INFINITAS: return "BitCon (INFINITAS)";
+    default:            return "BitCon (composite)";
     }
 }
 

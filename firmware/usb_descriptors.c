@@ -22,14 +22,9 @@
 
 #define USB_VID 0xCAFE  /* Placeholder. Get a real VID/PID before distributing. */
 
-/* Konami's official INFINITAS controller; see INFINITAS_OFFICIAL_ID. */
+/* Konami's official INFINITAS controller, which INFINITAS mode poses as. */
 #define KONAMI_VID           0x1CCF
 #define KONAMI_INFINITAS_PID 0x8048
-
-static bool official_infinitas(void)
-{
-    return INFINITAS_OFFICIAL_ID && settings_mode() == OUT_INFINITAS;
-}
 
 /*
  * Each USB layout gets its own PID.
@@ -40,15 +35,14 @@ static bool official_infinitas(void)
  * layout change look like a different device, which it effectively is.
  *
  * LR2 and beatoraja share one report descriptor and differ only in which
- * fields carry the turntable, so they share a PID. INFINITAS has its own
- * report layout and so its own PID.
+ * fields carry the turntable, so they share a PID. INFINITAS borrows the
+ * official controller's ID along with its report layout.
  */
 static uint16_t usb_pid(void)
 {
     const uint8_t mode = settings_mode();
-    if (official_infinitas())   return KONAMI_INFINITAS_PID;
-    if (mode == OUT_KEYBOARD)   return 0xB170;
-    if (mode == OUT_INFINITAS)  return 0xB173;
+    if (mode == OUT_INFINITAS) return KONAMI_INFINITAS_PID;
+    if (mode == OUT_KEYBOARD)  return 0xB170;
     if (settings_mode_is_gamepad(mode)) return 0xB171;
     return 0xB172;
 }
@@ -79,7 +73,7 @@ static tusb_desc_device_t desc_device = {
 
 uint8_t const *tud_descriptor_device_cb(void)
 {
-    desc_device.idVendor  = official_infinitas() ? KONAMI_VID : USB_VID;
+    desc_device.idVendor  = settings_mode() == OUT_INFINITAS ? KONAMI_VID : USB_VID;
     desc_device.idProduct = usb_pid();
     return (uint8_t const *)&desc_device;
 }

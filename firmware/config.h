@@ -29,7 +29,7 @@
  *   OUT_INFINITAS - turntable as an analog X axis holding the disc position,
  *                   wrapping every 256 units, and the rest of the report
  *                   laid out like the official controller, whose USB ID
- *                   it borrows (experimental, see INFINITAS_OFFICIAL_ID).
+ *                   it borrows (experimental, see INFINITAS mode below).
  *                   Also suits beatoraja with analog scratch on.
  *
  * OUT_INFINITAS keeps the value the single gamepad mode used to have, so a
@@ -135,18 +135,15 @@
  * ============================================================= */
 
 /*
- * Report as Konami's official INFINITAS controller (VID 0x1CCF, PID 0x8048),
- * as the arcin firmware does. INFINITAS recognises it and applies its own
- * fixed key layout, so its in-game key config is neither needed nor
- * honoured: press "デフォルトに戻す" (reset to default) in its settings once.
+ * INFINITAS mode reports as Konami's official INFINITAS controller (VID
+ * 0x1CCF, PID 0x8048), as the arcin firmware does. INFINITAS recognises it
+ * and applies its own fixed key layout, so its in-game key config is
+ * neither needed nor honoured: press "デフォルトに戻す" (reset to default)
+ * in its settings once.
  *
  * These are Konami's USB IDs, used here only so the game talks to the
- * controller. Set to 0 to keep BitCon's own IDs; INFINITAS then sees a
- * generic controller, if it accepts one at all.
+ * controller.
  */
-#ifndef INFINITAS_OFFICIAL_ID
-#define INFINITAS_OFFICIAL_ID 1
-#endif
 
 /*
  * Button bits of the official controller's report: keys 1-7 on buttons 1-7

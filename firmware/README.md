@@ -154,10 +154,8 @@ INFINITAS recognises Konami's official controller by its USB VID/PID and
 then applies its own fixed key layout, ignoring its key config screen.
 INFINITAS mode copies what arcin does to be recognised:
 
-- **USB ID**: Konami's VID `0x1CCF` / PID `0x8048`
-  (`INFINITAS_OFFICIAL_ID`). These are Konami's IDs, used only so the game
-  talks to the controller. Set it to 0 to keep BitCon's own ID (`0xB173`);
-  whether INFINITAS accepts a generic controller is untested.
+- **USB ID**: Konami's VID `0x1CCF` / PID `0x8048`. These are Konami's IDs,
+  used only so the game talks to the controller.
 - **Report**: report ID 1, 15 buttons and a padding bit, then X and Y.
   Keys 1–7 sit on buttons 1–7 and E1–E4 on buttons 9–12.
 - **Button layout** (`INFINITAS_BUTTON_LIST`): assumes the top plate's
@@ -272,7 +270,6 @@ number, so a second controller, or another tab, cannot take its place.
 | `TT_ANALOG_UNITS_PER_COUNT` | 2 | INFINITAS: slow scratches dropped (raise) or menus scroll too fast (lower) |
 | `TT_ANALOG_REVERSE_COUNTS` | 2 | INFINITAS: phantom scratches at rest (raise) or reversals feel late (lower) |
 | `TT_ANALOG_REVERSE` | 0 | INFINITAS: song select scrolls backwards (set 1) |
-| `INFINITAS_OFFICIAL_ID` | 1 | INFINITAS: report BitCon's own ID instead of Konami's (set 0) |
 | `INFINITAS_BUTTON_LIST` | E1, keys 1–7, E2 | INFINITAS: your buttons map to different keys |
 | `TT_COUNTS_PER_REV` | 192 | 4 × your disc's slot count; only the configurator uses it |
 

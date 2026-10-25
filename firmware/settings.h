@@ -16,7 +16,10 @@ void settings_load(void);
  * the USB descriptors the host has already read depend on it. */
 uint8_t settings_mode(void);
 
-/* "keyboard", "gamepad" or "composite". */
+/* True for the gamepad-only modes: LR2, beatoraja and INFINITAS. */
+bool settings_mode_is_gamepad(uint8_t mode);
+
+/* "keyboard", "lr2", "beatoraja", "infinitas" or "composite". */
 const char *settings_mode_name(uint8_t mode);
 
 /* Parses a mode name. Returns false for anything else. */

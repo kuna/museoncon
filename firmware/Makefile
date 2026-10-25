@@ -1,7 +1,7 @@
 # Build the firmware into build/bitcon.uf2.
 #
 #   make build                 # default output mode from config.h
-#   make build MODE=KEYBOARD   # KEYBOARD | GAMEPAD | COMPOSITE
+#   make build MODE=LR2        # KEYBOARD | LR2 | BEATORAJA | INFINITAS | COMPOSITE
 #   make clean
 #
 # MODE only sets the mode a board boots in before the configurator page

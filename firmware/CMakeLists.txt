@@ -6,15 +6,17 @@ set(PICO_PLATFORM rp2350)
 
 include(pico_sdk_import.cmake)
 
-project(bitcon VERSION 0.2.0 LANGUAGES C CXX ASM)
+project(bitcon VERSION 0.3.0 LANGUAGES C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
 # Mode a board boots in until the configurator stores another one:
-# KEYBOARD, GAMEPAD or COMPOSITE. Leave unset to use config.h's default.
-set(BITCON_OUTPUT_MODE "" CACHE STRING "KEYBOARD | GAMEPAD | COMPOSITE")
+# KEYBOARD, LR2, BEATORAJA, INFINITAS or COMPOSITE. Leave unset to use
+# config.h's default.
+set(BITCON_OUTPUT_MODE "" CACHE STRING
+    "KEYBOARD | LR2 | BEATORAJA | INFINITAS | COMPOSITE")
 
 add_executable(bitcon
     main.c
@@ -30,15 +32,14 @@ target_include_directories(bitcon PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
 )
 
-if(BITCON_OUTPUT_MODE STREQUAL "KEYBOARD")
-    target_compile_definitions(bitcon PRIVATE DEFAULT_OUTPUT_MODE=1)
-elseif(BITCON_OUTPUT_MODE STREQUAL "GAMEPAD")
-    target_compile_definitions(bitcon PRIVATE DEFAULT_OUTPUT_MODE=2)
-elseif(BITCON_OUTPUT_MODE STREQUAL "COMPOSITE")
-    target_compile_definitions(bitcon PRIVATE DEFAULT_OUTPUT_MODE=3)
-elseif(NOT BITCON_OUTPUT_MODE STREQUAL "")
-    message(FATAL_ERROR
-        "BITCON_OUTPUT_MODE must be KEYBOARD, GAMEPAD or COMPOSITE")
+set(BITCON_MODES KEYBOARD LR2 BEATORAJA INFINITAS COMPOSITE)
+if(NOT BITCON_OUTPUT_MODE STREQUAL "")
+    if(NOT BITCON_OUTPUT_MODE IN_LIST BITCON_MODES)
+        message(FATAL_ERROR "BITCON_OUTPUT_MODE must be one of: ${BITCON_MODES}")
+    endif()
+    # Expands to the matching OUT_* constant from config.h.
+    target_compile_definitions(bitcon PRIVATE
+        DEFAULT_OUTPUT_MODE=OUT_${BITCON_OUTPUT_MODE})
 endif()
 
 target_link_libraries(bitcon

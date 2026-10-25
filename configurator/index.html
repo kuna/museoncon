@@ -278,9 +278,19 @@
       <h2>Output mode</h2>
       <div class="modes" id="modes">
         <label class="mode">
-          <input type="radio" name="mode" value="gamepad">
-          <b>GAMEPAD</b>
-          <span>Gamepad buttons 1–9, turntable on the Y axis</span>
+          <input type="radio" name="mode" value="beatoraja">
+          <b>GAMEPAD · beatoraja</b>
+          <span>Turntable as a digital X axis. Works with analog scratch off (the default).</span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="lr2">
+          <b>GAMEPAD · LR2</b>
+          <span>Turntable as buttons 10 / 11. LR2 only reads a digital turntable.</span>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="infinitas">
+          <b>GAMEPAD · INFINITAS</b>
+          <span>Turntable as an analog X axis, like the official controller. Also for beatoraja with analog scratch on.</span>
         </label>
         <label class="mode">
           <input type="radio" name="mode" value="keyboard">
@@ -290,11 +300,11 @@
         <label class="mode">
           <input type="radio" name="mode" value="composite">
           <b>COMPOSITE</b>
-          <span>Keyboard and gamepad at the same time</span>
+          <span>Keyboard (turntable on Q / W) and INFINITAS-style gamepad together</span>
         </label>
       </div>
       <button class="btn primary" id="apply" disabled>Apply mode</button>
-      <p class="hint">The controller restarts to apply the change. The mode is stored on the controller, so it survives unplugging and firmware updates.</p>
+      <p class="hint">The controller restarts to apply the change. The mode is stored on the controller, so it survives unplugging and firmware updates. In beatoraja and LR2, bind the scratch keys by spinning the turntable in their key config.</p>
     </section>
 
     <section class="card disabled-when-off">
@@ -311,7 +321,13 @@
 
   const VID = 0xCAFE;
   const PIDS = [0xB170, 0xB171, 0xB172];
-  const MODE_LABEL = { keyboard: 'KEYBOARD', gamepad: 'GAMEPAD', composite: 'COMPOSITE' };
+  const MODE_LABEL = {
+    keyboard: 'KEYBOARD',
+    lr2: 'GAMEPAD · LR2',
+    beatoraja: 'GAMEPAD · beatoraja',
+    infinitas: 'GAMEPAD · INFINITAS',
+    composite: 'COMPOSITE',
+  };
   const RECONNECT_HINT_MS = 6000;
   const LOG_LIMIT = 400;
 
@@ -582,7 +598,7 @@
       setStatus('busy', 'Restarting…');
       reconnectTimer = setTimeout(() => {
         setStatus('off', 'Not connected');
-        notify('The browser needs permission once for each mode on each controller. Press Connect and select BitCon again.', true);
+        notify('The browser needs permission once per controller for each of keyboard, gamepad and composite modes. Press Connect and select BitCon again.', true);
       }, RECONNECT_HINT_MS);
     } else if (rebooting === 'bootsel') {
       rebooting = null;

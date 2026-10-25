@@ -31,7 +31,7 @@ static uint8_t g_mode = DEFAULT_OUTPUT_MODE;
 
 static bool mode_valid(uint8_t mode)
 {
-    return mode == OUT_KEYBOARD || mode == OUT_GAMEPAD || mode == OUT_COMPOSITE;
+    return mode >= OUT_KEYBOARD && mode <= OUT_BEATORAJA;
 }
 
 void settings_load(void)
@@ -49,11 +49,18 @@ uint8_t settings_mode(void)
     return g_mode;
 }
 
+bool settings_mode_is_gamepad(uint8_t mode)
+{
+    return mode == OUT_LR2 || mode == OUT_BEATORAJA || mode == OUT_INFINITAS;
+}
+
 const char *settings_mode_name(uint8_t mode)
 {
     switch (mode) {
     case OUT_KEYBOARD:  return "keyboard";
-    case OUT_GAMEPAD:   return "gamepad";
+    case OUT_LR2:       return "lr2";
+    case OUT_BEATORAJA: return "beatoraja";
+    case OUT_INFINITAS: return "infinitas";
     case OUT_COMPOSITE: return "composite";
     default:            return "unknown";
     }
@@ -61,10 +68,9 @@ const char *settings_mode_name(uint8_t mode)
 
 bool settings_mode_from_name(const char *name, uint8_t *mode)
 {
-    static const uint8_t modes[] = { OUT_KEYBOARD, OUT_GAMEPAD, OUT_COMPOSITE };
-    for (size_t i = 0; i < sizeof(modes); i++) {
-        if (strcmp(name, settings_mode_name(modes[i])) == 0) {
-            *mode = modes[i];
+    for (uint8_t m = OUT_KEYBOARD; m <= OUT_BEATORAJA; m++) {
+        if (strcmp(name, settings_mode_name(m)) == 0) {
+            *mode = m;
             return true;
         }
     }

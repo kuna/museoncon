@@ -38,9 +38,6 @@ differently:
 | LR2 | GAMEPAD · LR2 |
 | INFINITAS, or beatoraja with analog scratch on | GAMEPAD · INFINITAS |
 
-In beatoraja, setting Input duration (launcher, Input tab) to about 25 ms
-keeps fast back-and-forth scratches from firing twice.
-
 Open the file directly in Chrome or Edge on a desktop (Web Serial is not
 available in Firefox or Safari), plug in the controller, and press Connect.
 No server or install is needed. The protocol is documented in

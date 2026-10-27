@@ -117,7 +117,7 @@ speaks one of them breaks in the others:
 - **Digital**: three states, neutral, clockwise and counter-clockwise.
 
 **LR2** only reads a digital turntable. LR2 mode puts it on buttons 10 and
-11. A direction registers after `TT_DIGITAL_STEP` counts (3.75°) and holds
+11. A direction registers after `TT_DIGITAL_STEP` counts (5.6°) and holds
 for `TT_LR2_SUSTAIN_US` (200 ms, arcin's LR2 setting) after the last step,
 so slow scratches do not flicker into extra hits. A reversal switches
 straight to the other button; both are never held at once.
@@ -226,7 +226,7 @@ number, so a second controller, or another tab, cannot take its place.
 | Parameter | Default | Adjust when |
 |---|---|---|
 | `DEBOUNCE_US` | 1000 | Chatter appears — raise toward 2000–4000 |
-| `TT_DIGITAL_STEP` | 2 | Digital scratch too twitchy (raise) or too sluggish (lower); 2 is the minimum |
+| `TT_DIGITAL_STEP` | 3 | Extra scratches on fast reversals (raise) or scratch feels sluggish (lower); 2 is the minimum |
 | `TT_LR2_SUSTAIN_US` | 200000 | LR2 / keyboard: scratch breaks up when slow (raise) or releases late (lower) |
 | `TT_BEATORAJA_SUSTAIN_US` | 100000 | Same, for beatoraja mode |
 | `TT_ANALOG_UNITS_PER_COUNT` | 2 | INFINITAS: slow scratches dropped (raise) or menus scroll too fast (lower) |
